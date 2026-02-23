@@ -463,7 +463,7 @@ const state = {
     flowAnims:[], pulseAnims:[], prevVals:{},
     params:{
         feedTemp:75, feedPressure:1.0, feedFlow:1000, refluxRatio:2.5,
-        stages:20, feedComposition:0.5, distillateComposition:0.95, bottomsComposition:0.05,
+        feedComposition:0.5, distillateComposition:0.95, bottomsComposition:0.05,
         cwTempIn:25, cwTempOut:40, steamTemp:200, steamPressure:5
     }
 };
@@ -495,7 +495,7 @@ const PARAM_INFO = {
     feedTemp:       {title:'Feed Temperature',         def:'Temperature at which the feed mixture enters the column.',         app:'Determines thermal condition q. Feed can be subcooled liquid, saturated liquid, two-phase, saturated vapor, or superheated vapor.',          sig:'Impacts feed stage location, energy requirements, and separation efficiency.'},
     refluxRatio:    {title:'Reflux Ratio (R)',          def:'Ratio of liquid returned to column to distillate. R = L/D.',       app:'Operated at 1.2–1.5 × minimum reflux ratio for economic optimum.',                                                                         sig:'Higher R → better purity but higher energy and operating cost.'},
     feedFlow:       {title:'Feed Flow Rate',            def:'Mass flow rate of feed entering the column (kg/h).',              app:'Sets production capacity. Determines column diameter and heat exchanger area.',                                                               sig:'Directly scales all flows, duties, and equipment sizes.'},
-    stages:         {title:'Number of Stages (N)',      def:'Number of theoretical equilibrium stages.',                       app:'Actual trays = N_theoretical / Murphree efficiency (≈60–80%).',                                                                            sig:'More stages → taller column → higher capital but lower reflux.'},
+    stages:         {title:'Theoretical Stages vs. Actual Trays', def:'N is the number of theoretical equilibrium stages — ideal contacts where vapour and liquid reach perfect thermodynamic equilibrium. No real tray achieves this ideal.', app:'Real sieve trays reach only ~70% of ideal equilibrium (Murphree efficiency η = 0.70). So physical trays needed = ⌈N / η⌉. Example: N = 7 → ⌈7 / 0.70⌉ = 10 actual trays.', sig:'Column height and capital cost depend on actual trays, not N. Higher α (relative volatility) means fewer stages for the same separation. Always divide by efficiency before ordering hardware.'},
     feedComposition:{title:'Feed Composition (xF)',    def:'Mole fraction of light component in the feed.',                    app:'Defines the separation problem with xD and xB.',                                                                                           sig:'Sets the material balance — all stream flows derive from this.'},
     distillatePurity:{title:'Distillate Purity (xD)', def:'Mole fraction of light component in overhead distillate.',         app:'Typical targets: 95–99.9% depending on product specification.',                                                                            sig:'Higher purity → exponentially more stages and reflux needed.'},
     bottomsPurity:  {title:'Bottoms Purity (xB)',       def:'Mole fraction of light component in bottoms (low = pure heavy).', app:'Defines heavy product specification.',                                                                                                     sig:'Together with xD, sets the total separation requirement.'},
@@ -518,7 +518,14 @@ function calc() {
     const D=F*(xF-xB)/(xD-xB), B=F-D, L=D*R, V=L+D;
     const Vmol=(V/m.mw)*1000, QcKJ=Vmol*m.lam, Qc=QcKJ/3600, Qr=Qc*1.08;
     const Nmin=Math.log((xD/(1-xD))*((1-xB)/xB))/Math.log(m.alpha);
-    const Rmin=(1/(m.alpha-1))*((xD/xF)-m.alpha*((1-xD)/(1-xF)));
+    let Rmin=(1/(m.alpha-1))*((xD/xF)-m.alpha*((1-xD)/(1-xF)));
+    if (Rmin < 0) Rmin = 0;  // clamp for asymmetric compositions
+    if (R <= Rmin * 1.05) return { err: `R (${R}) must exceed Rmin×1.05 (${(Rmin*1.05).toFixed(2)})`, m };
+    const X  = (R - Rmin) / (R + 1);
+    const exp_arg = ((1 + 54.4*X) / (11 + 117.7*X)) * ((X - 1) / Math.sqrt(X));
+    const Y  = 1 - Math.exp(exp_arg);
+    const N  = Math.ceil((Nmin + Y) / (1 - Y));   // theoretical stages
+    const Na = Math.ceil(N / 0.70);                // actual trays (70% efficiency)
     const lamMass=(m.lam/m.mw)*1000, Tb=m.bpL*xF+m.bpH*(1-xF);
     const qVal=(lamMass+m.cp*(Tb-state.params.feedTemp))/lamMass;
     const cwDT=state.params.cwTempOut-state.params.cwTempIn;
@@ -536,7 +543,7 @@ function calc() {
     const rebArea=rebLMTD>0?(Qr*1000)/(1000*rebLMTD):0;
     return {
         D:D.toFixed(1),B:B.toFixed(1),L:L.toFixed(1),Qc:Qc.toFixed(0),Qr:Qr.toFixed(0),
-        Nmin:Nmin.toFixed(1),N:state.params.stages,Rmin:Rmin.toFixed(2),q:qVal.toFixed(3),
+        Nmin:Nmin.toFixed(1),N,Na,Rmin:Rmin.toFixed(2),q:qVal.toFixed(3),
         cwFlow:cwFlow.toFixed(0),cwDT:cwDT.toFixed(1),condLMTD:condLMTD.toFixed(1),condArea:condArea.toFixed(1),
         stFlow:stFlow.toFixed(0),stLam:stLam.toFixed(0),condT:condT.toFixed(0),rebLMTD:rebLMTD.toFixed(1),rebArea:rebArea.toFixed(1),
         m, err:null
@@ -550,7 +557,7 @@ function rl(latex) {
 
 // ── SVG BUILDER (warm-light colour scheme) ────────────────────────────────
 function buildSVG() {
-    const stages=state.params.stages, stH=CH/stages, res=calc();
+    const stages=20, stH=CH/stages, res=calc();
 
     // Light-mode SVG palette
     const INK    = 'rgba(28,25,23,0.68)';     // equipment outlines
@@ -723,10 +730,14 @@ function buildSVG() {
             ${trays}
             <line x1="${CX-CW/2}" y1="${FEED_Y}" x2="${CX-CW/2-24}" y2="${FEED_Y}"
                   stroke="${C_FEED}" stroke-width="1.4" opacity="0" id="feed-nozzle"/>
-            <text x="${CX+CW/2+22}" y="${CY_TOP+CH/2+4}" font-family="'Space Mono',monospace"
-                  font-size="18" fill="rgba(28,25,23,0.80)" text-anchor="start" opacity="0" id="lbl-stages">N = ${stages}</text>
-            <text x="${CX+CW/2+22}" y="${CY_TOP+CH/2+16}" font-family="'Space Mono',monospace"
-                  font-size="18" fill="rgba(28,25,23,0.80)" text-anchor="start" opacity="0" id="lbl-stages2">stages</text>
+            <text x="${CX+CW/2+22}" y="${CY_TOP+CH/2-2}" font-family="'Space Mono',monospace"
+                  font-size="14" fill="rgba(28,25,23,0.80)" text-anchor="start" opacity="0" id="lbl-stages">N = ${stages} theoretical</text>
+            <text x="${CX+CW/2+22}" y="${CY_TOP+CH/2+14}" font-family="'Space Mono',monospace"
+                  font-size="14" fill="rgba(28,25,23,0.80)" text-anchor="start" opacity="0" id="lbl-stages2">stages</text>
+            <text x="${CX+CW/2+22}" y="${CY_TOP+CH/2+30}" font-family="'Space Mono',monospace"
+                  font-size="11" fill="rgba(0,113,227,0.75)" text-anchor="start" opacity="0" id="lbl-stages3"
+                  onclick="event.stopPropagation();showParamInfo('stages')"
+                  style="cursor:pointer;text-decoration:underline">ⓘ what does this mean?</text>
         </g>
 
         <!-- REBOILER -->
@@ -848,7 +859,7 @@ function runBoot() {
       .add('.nozzle',    {opacity:[0,1], duration:250, delay:stagger(35)}, 3060)
       .add('.heat-wave', {opacity:[0,0.9], duration:400, delay:stagger(100)}, 3160)
       .add('#pipes-group', {opacity:[0,0.9], duration:700}, 3160)
-      .add(['#lbl-stages','#lbl-stages2'], {opacity:[0,1], duration:400, delay:stagger(80)}, 3260)
+      .add(['#lbl-stages','#lbl-stages2','#lbl-stages3'], {opacity:[0,1], duration:400, delay:stagger(80)}, 3260)
 
       .add('.leader-line', {
           opacity:[0,0.6], scaleX:[0,1], duration:400,
@@ -912,7 +923,7 @@ function animateResults(initial=false) {
         {l:'Distillate', v:parseFloat(res.D),    u:'kg/h',  sub:res.m.light+'-rich',       clr:'#0071e3'},
         {l:'Bottoms',    v:parseFloat(res.B),    u:'kg/h',  sub:res.m.heavy+'-rich',        clr:'#6e2fa8'},
         {l:'Reflux',     v:parseFloat(res.L),    u:'kg/h',  sub:'R = '+state.params.refluxRatio, clr:'#0071e3'},
-        {l:'Min Stages', v:parseFloat(res.Nmin), u:'',      sub:'Actual: '+res.N,            clr:'#6b6560'},
+        {l:'Calc. Stages',v:res.N,                u:'',dp:0,  sub:'Nmin = '+res.Nmin,          clr:'#6b6560'},
         {l:'Min Reflux', v:parseFloat(res.Rmin), u:'',      sub:'Underwood',                 clr:'#6b6560'},
         {l:'q-value',    v:parseFloat(res.q),    u:'',      sub:'Feed quality',               clr:'#1a8038'},
         {l:'Cond. Duty', v:parseFloat(res.Qc),   u:'kW',    sub:'Heat removal',               clr:'#0071e3'},
@@ -921,7 +932,7 @@ function animateResults(initial=false) {
     bar.innerHTML = items.map(it=>`
         <div class="result-item">
             <div class="result-lbl">${it.l}</div>
-            <div class="result-val" data-target="${it.v}" data-dp="${it.u===''?3:0}"
+            <div class="result-val" data-target="${it.v}" data-dp="${it.dp!==undefined?it.dp:(it.u===''?3:0)}"
                  style="color:${it.clr}">—</div>
             <div class="result-sub">${it.u||it.sub}</div>
         </div>`).join('');
@@ -967,8 +978,9 @@ function updateSVGLabels() {
     set('svg-sub-reboiler',   res.err ? '—' : res.Qr + ' kW');
     set('svg-sub-condenser',  res.err ? '—' : res.Qc + ' kW');
 
-    // Column stage count
-    set('lbl-stages', 'N = ' + state.params.stages);
+    // Column stage count (computed via Gilliland)
+    set('lbl-stages',  res.err ? 'N = — theoretical'  : 'N = ' + res.N + ' theoretical');
+    set('lbl-stages2', res.err ? ''                     : '→ ' + res.Na + ' trays  (η = 70%)');
 
     // Utility box labels
     set('svg-cw-in-temp',  state.params.cwTempIn  + '°C');
@@ -998,7 +1010,6 @@ function buildParamsPanel() {
         {k:'feedTemp',        l:'Feed Temperature', p:'feedTemp',              min:mix.bpL-40,max:mix.bpH+40,step:1,    d:state.params.feedTemp+'°C',                               v:state.params.feedTemp},
         {k:'refluxRatio',     l:'Reflux Ratio (R)', p:'refluxRatio',           min:1,  max:10,  step:0.1,  d:state.params.refluxRatio,                                 v:state.params.refluxRatio},
         {k:'feedFlow',        l:'Feed Flow Rate',   p:'feedFlow',              min:500,max:5000,step:100,  d:state.params.feedFlow+' kg/h',                            v:state.params.feedFlow},
-        {k:'stages',          l:'Number of Stages', p:'stages',                min:10, max:40,  step:1,    d:state.params.stages+' trays',                              v:state.params.stages},
         {k:'feedComposition', l:'Feed Comp (xF)',   p:'feedComposition',       min:0.1,max:0.9, step:0.05, d:state.params.feedComposition,                             v:state.params.feedComposition},
         {k:'distillatePurity',l:'Distillate (xD)',  p:'distillateComposition', min:0.9,max:0.999,step:0.005,d:(state.params.distillateComposition*100).toFixed(1)+'%', v:state.params.distillateComposition},
         {k:'bottomsPurity',   l:'Bottoms (xB)',     p:'bottomsComposition',    min:0.001,max:0.10,step:0.005,d:(state.params.bottomsComposition*100).toFixed(1)+'%',  v:state.params.bottomsComposition},
