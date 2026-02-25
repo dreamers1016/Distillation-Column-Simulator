@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Distillation Column — CFB2032</title>
+  <title>Distillation Column v3 — CFB2032</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400&family=Lora:wght@400;500&family=DM+Mono:wght@400;500&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
@@ -560,7 +560,7 @@ input[type="range"]::-webkit-slider-thumb {
         <div id="lp-params"></div>
         <div id="lp-accordions"></div>
         <div class="left-footer">
-          <span>© Dr Chai Yee Ho · UTP CFB2032</span>
+          <span>© Dr Chai Yee Ho · Dept of Chemical Engineering, Universiti Teknologi PETRONAS</span>
         </div>
       </div>
     </div>
@@ -601,14 +601,16 @@ const state = {
 
 // ── DATA ───────────────────────────────────────────────────────────────────
 const MIXES = {
-  'methanol-water':    {name:'Methanol-Water',     light:'Methanol',    heavy:'Water',     alpha:3.8,  feedComp:0.5, lam:35.3, mw:25.0, cp:3.0, T:75,  P:1.0,  bpL:64.7,  bpH:100.0},
-  'ethanol-water':     {name:'Ethanol-Water',       light:'Ethanol',     heavy:'Water',     alpha:2.3,  feedComp:0.1, lam:38.6, mw:30.0, cp:3.5, T:85,  P:1.0,  bpL:78.4,  bpH:100.0},
-  'benzene-toluene':   {name:'Benzene-Toluene',     light:'Benzene',     heavy:'Toluene',   alpha:2.4,  feedComp:0.5, lam:30.8, mw:85.0, cp:1.8, T:95,  P:1.0,  bpL:80.1,  bpH:110.6},
-  'acetone-water':     {name:'Acetone-Water',        light:'Acetone',     heavy:'Water',     alpha:5.2,  feedComp:0.3, lam:29.1, mw:35.0, cp:3.2, T:65,  P:1.0,  bpL:56.0,  bpH:100.0},
-  'propane-butane':    {name:'Propane-Butane',       light:'Propane',     heavy:'Butane',    alpha:3.5,  feedComp:0.5, lam:18.8, mw:50.0, cp:2.4, T:-10, P:5.0,  bpL:-42.1, bpH:-0.5},
-  'hexane-heptane':    {name:'Hexane-Heptane',       light:'Hexane',      heavy:'Heptane',   alpha:2.3,  feedComp:0.5, lam:28.9, mw:93.0, cp:2.2, T:80,  P:1.0,  bpL:68.7,  bpH:98.4},
-  'isopropanol-water': {name:'Isopropanol-Water',   light:'Isopropanol', heavy:'Water',     alpha:1.8,  feedComp:0.4, lam:39.9, mw:36.0, cp:3.4, T:85,  P:1.0,  bpL:82.6,  bpH:100.0},
-  'methanol-ethanol':  {name:'Methanol-Ethanol',    light:'Methanol',    heavy:'Ethanol',   alpha:1.7,  feedComp:0.5, lam:35.3, mw:39.0, cp:2.6, T:70,  P:1.0,  bpL:64.7,  bpH:78.4}
+  // mw = average feed MW (kg/kmol) used for feed molar flow conversion
+  // mwL = molecular weight of light component, mwH = molecular weight of heavy component
+  'methanol-water':    {name:'Methanol-Water',     light:'Methanol',    heavy:'Water',     alpha:3.8,  feedComp:0.5, lam:35.3, mw:25.0, mwL:32.0,  mwH:18.0,  cp:3.0, T:75,  P:1.0,  bpL:64.7,  bpH:100.0},
+  'ethanol-water':     {name:'Ethanol-Water',       light:'Ethanol',     heavy:'Water',     alpha:2.3,  feedComp:0.1, lam:38.6, mw:30.0, mwL:46.0,  mwH:18.0,  cp:3.5, T:85,  P:1.0,  bpL:78.4,  bpH:100.0},
+  'benzene-toluene':   {name:'Benzene-Toluene',     light:'Benzene',     heavy:'Toluene',   alpha:2.4,  feedComp:0.5, lam:30.8, mw:85.0, mwL:78.1,  mwH:92.1,  cp:1.8, T:95,  P:1.0,  bpL:80.1,  bpH:110.6},
+  'acetone-water':     {name:'Acetone-Water',        light:'Acetone',     heavy:'Water',     alpha:5.2,  feedComp:0.3, lam:29.1, mw:35.0, mwL:58.1,  mwH:18.0,  cp:3.2, T:65,  P:1.0,  bpL:56.0,  bpH:100.0},
+  'propane-butane':    {name:'Propane-Butane',       light:'Propane',     heavy:'Butane',    alpha:3.5,  feedComp:0.5, lam:18.8, mw:50.0, mwL:44.1,  mwH:58.1,  cp:2.4, T:-10, P:5.0,  bpL:-42.1, bpH:-0.5},
+  'hexane-heptane':    {name:'Hexane-Heptane',       light:'Hexane',      heavy:'Heptane',   alpha:2.3,  feedComp:0.5, lam:28.9, mw:93.0, mwL:86.2,  mwH:100.2, cp:2.2, T:80,  P:1.0,  bpL:68.7,  bpH:98.4},
+  'isopropanol-water': {name:'Isopropanol-Water',   light:'Isopropanol', heavy:'Water',     alpha:1.8,  feedComp:0.4, lam:39.9, mw:36.0, mwL:60.1,  mwH:18.0,  cp:3.4, T:85,  P:1.0,  bpL:82.6,  bpH:100.0},
+  'methanol-ethanol':  {name:'Methanol-Ethanol',    light:'Methanol',    heavy:'Ethanol',   alpha:1.7,  feedComp:0.5, lam:35.3, mw:39.0, mwL:32.0,  mwH:46.1,  cp:2.6, T:70,  P:1.0,  bpL:64.7,  bpH:78.4}
 };
 
 const COMP_INFO = {
@@ -645,35 +647,70 @@ const PERIM = {col:1080, cnd:680, reb:690, drum:500, cwS:306, cwR:306, stm:326, 
 function calc() {
   const m = MIXES[state.mix];
   const {distillateComposition:xD,bottomsComposition:xB,feedComposition:xF,feedFlow:F,refluxRatio:R} = state.params;
+
+  // ── STEP 1: Stream average molecular weights (kg/kmol) ──────────────────
+  // Each stream has a different composition → different average MW.
+  // mwL and mwH are individual component MWs; xD, xF, xB are MOLE fractions.
+  const mwL = m.mwL, mwH = m.mwH;
+  const mwFeed = xF * mwL + (1 - xF) * mwH;          // average MW of feed
+  const mwDist = xD * mwL + (1 - xD) * mwH;          // average MW of distillate
+  const mwBots = xB * mwL + (1 - xB) * mwH;          // average MW of bottoms
+
+  // ── STEP 2: Convert feed to molar flow (kmol/h) ─────────────────────────
+  const Fmol = F / mwFeed;                             // kmol/h
+
   const lamMass=(m.lam/m.mw)*1000, Tb=m.bpL*xF+m.bpH*(1-xF);
   const qVal=(lamMass+m.cp*(Tb-state.params.feedTemp))/lamMass;
   // Real-plant: drum level control increases reflux when feed is hot/vaporous
-  const qDev = Math.min(Math.max(0, 1 - qVal), 1.5); // deviation below saturated liquid
-  const R_eff = R * (1 + 0.10 * qDev);               // up to ~15% implicit increase
+  const qDev = Math.min(Math.max(0, 1 - qVal), 1.5);
+  const R_eff = R * (1 + 0.10 * qDev);
   const Tcond = m.bpL*xD + m.bpH*(1-xD);
   const Treb  = m.bpL*xB + m.bpH*(1-xB);
   const lamCond = m.lam * (Tcond + 273.15) / (Tb + 273.15);
   const lamReb  = m.lam * (Treb  + 273.15) / (Tb + 273.15);
   if (xD<=xF||xF<=xB||xD<=xB) return {err:'Invalid: need xB < xF < xD',m};
-  const D=F*(xF-xB)/(xD-xB), B=F-D, L=D*R_eff, V=L+D;
-  const Fmol = (F / m.mw) * 1000;
-  const Vmol = (V / m.mw) * 1000;
+
+  // ── STEP 3: Molar material balance ──────────────────────────────────────
+  // Fmol = Dmol + Bmol  and  Fmol·xF = Dmol·xD + Bmol·xB
+  // Solving: Dmol = Fmol·(xF - xB)/(xD - xB)
+  const Dmol = Fmol * (xF - xB) / (xD - xB);         // kmol/h distillate
+  const Bmol = Fmol - Dmol;                            // kmol/h bottoms
+
+  // ── STEP 4: Convert molar flows back to MASS flows (kg/h) ───────────────
+  // Use stream-specific average MW — this is the key fix vs v2 which used a
+  // single feed MW for all streams, giving incorrect D and B mass flowrates.
+  const D = Dmol * mwDist;                             // kg/h distillate
+  const B = Bmol * mwBots;                             // kg/h bottoms
+
+  // ── STEP 5: Internal column flows ───────────────────────────────────────
+  // Reflux L and vapor V are in kmol/h, then converted to kg/h using distillate MW
+  // (overhead section liquid/vapor composition ≈ distillate composition)
+  const Lmol = Dmol * R_eff;                          // kmol/h reflux
+  const Vmol = Lmol + Dmol;                           // kmol/h vapor (rectifying)
+  const L = Lmol * mwDist;                            // kg/h reflux (mass)
+  const V = Vmol * mwDist;                            // kg/h vapor (mass, rectifying)
+
+  // ── STEP 6: Energy calculations use MOLAR flows × molar latent heat ─────
+  // lamCond/lamReb are in kJ/mol (derived from m.lam kJ/mol via temperature correction)
+  // Multiply by 1000 to get kJ/kmol, then divide by 3600 to get kW
   // Real-plant: column temperature profile shifts with feed thermal state
-  // ~10% of feed superheat (above bubble point) propagates to overhead section
   const T_overhead = Tcond + 0.10 * Math.max(0, state.params.feedTemp - Tb);
-  const Cp_v = m.cp * 0.75; // vapor Cp ≈ 75% of liquid Cp (engineering estimate)
-  const QcKJ = Vmol * lamCond;
-  const QcSensible = Vmol * Cp_v * Math.max(0, T_overhead - Tcond) / 3600; // kW
+  const Cp_v = m.cp * 0.75;
+  const QcKJ = Vmol * lamCond * 1000;                 // kJ/h  (Vmol in kmol/h × kJ/mol × 1000)
+  const QcSensible = Vmol * 1000 * Cp_v * Math.max(0, T_overhead - Tcond) / 3600; // kW
   const Qc   = QcKJ / 3600 + QcSensible;
-  const Vprime_mol = Vmol + (qVal - 1) * Fmol;
-  const QrKJ = Vprime_mol * lamReb;
+
+  // Stripping section vapor (below feed): V' = V - (1-q)·Fmol
+  const Vprime_mol = Vmol - (1 - qVal) * Fmol;       // kmol/h
+  const QrKJ = Vprime_mol * lamReb * 1000;            // kJ/h
   const Qr   = QrKJ / 3600 * 1.08;
+  // ── STEP 7: McCabe-Thiele stage count (unchanged — operates on mole fractions) ──
   const Nmin=Math.log((xD/(1-xD))*((1-xB)/xB))/Math.log(m.alpha);
   let Rmin=(1/(m.alpha-1))*((xD/xF)-m.alpha*((1-xD)/(1-xF)));
   if (Rmin < 0) Rmin = 0;
   if (R <= Rmin * 1.05) return { err: `R (${R}) must exceed Rmin×1.05 (${(Rmin*1.05).toFixed(2)})`, m };
-  const rectSlope = R / (R + 1);
-  const rectInt   = xD / (R + 1);
+  const rectSlope = R_eff / (R_eff + 1);
+  const rectInt   = xD / (R_eff + 1);
   let xFeed;
   if (Math.abs(qVal - 1) < 1e-6) {
     xFeed = xF;
@@ -696,23 +733,40 @@ function calc() {
       : stripSlope * xEq + stripInt;
   }
   const Na = Math.ceil(N / 0.70);
+
+  // ── STEP 8: Utility flows ────────────────────────────────────────────────
+  // CW flow: Q_cond (kW) = m_cw (kg/s) × Cp_w (kJ/kg·K) × ΔT → m_cw in kg/h
+  // QcKJ is in kJ/h → divide by (Cp × ΔT) gives kg/h directly
   const cwDT=state.params.cwTempOut-state.params.cwTempIn;
   const cwFlow=cwDT>0?(QcKJ/(4.18*cwDT)):0;
+
+  // Condenser LMTD and area
   const dT1c=Tcond-state.params.cwTempOut, dT2c=Tcond-state.params.cwTempIn;
   const condLMTD=(dT1c>0&&dT2c>0&&Math.abs(dT1c-dT2c)>0.01)?(dT2c-dT1c)/Math.log(dT2c/dT1c):(dT1c>0?dT1c:0);
   const condArea=condLMTD>0?(Qc*1000)/(800*condLMTD):0;
+
+  // Steam flow: Q_reb (kW) × 3600 → kJ/h ÷ λ_steam (kJ/kg) → kg/h
   const stLam=2200-(state.params.steamPressure-1)*25;
   const stFlow=stLam>0?(Qr*3600)/stLam:0;
+
+  // Condensate return temperature and reboiler LMTD
   const condT=100+(state.params.steamPressure-1)*7.5;
   const dT1r=condT-Treb, dT2r=state.params.steamTemp-Treb;
   const rebLMTD=(dT1r>0&&dT2r>0&&Math.abs(dT1r-dT2r)>0.01)?(dT2r-dT1r)/Math.log(dT2r/dT1r):(dT1r>0?dT1r:0);
   const rebArea=rebLMTD>0?(Qr*1000)/(1000*rebLMTD):0;
+
   return {
-    D:D.toFixed(1),B:B.toFixed(1),L:L.toFixed(1),Qc:Qc.toFixed(0),Qr:Qr.toFixed(0),
-    Nmin:Nmin.toFixed(1),N,Na,Rmin:Rmin.toFixed(2),q:qVal.toFixed(3),
-    cwFlow:cwFlow.toFixed(0),cwDT:cwDT.toFixed(1),condLMTD:condLMTD.toFixed(1),condArea:condArea.toFixed(1),
-    stFlow:stFlow.toFixed(0),stLam:stLam.toFixed(0),condT:condT.toFixed(0),rebLMTD:rebLMTD.toFixed(1),rebArea:rebArea.toFixed(1),
+    D:D.toFixed(1), B:B.toFixed(1), L:L.toFixed(1),
+    Qc:Qc.toFixed(0), Qr:Qr.toFixed(0),
+    Nmin:Nmin.toFixed(1), N, Na, Rmin:Rmin.toFixed(2), q:qVal.toFixed(3),
+    cwFlow:cwFlow.toFixed(0), cwDT:cwDT.toFixed(1),
+    condLMTD:condLMTD.toFixed(1), condArea:condArea.toFixed(1),
+    stFlow:stFlow.toFixed(0), stLam:stLam.toFixed(0),
+    condT:condT.toFixed(0), rebLMTD:rebLMTD.toFixed(1), rebArea:rebArea.toFixed(1),
     Reff: R_eff.toFixed(2), Toverhead: T_overhead.toFixed(1), QcSensible: QcSensible.toFixed(0),
+    // Expose molar flows for advanced display
+    Dmol: Dmol.toFixed(2), Bmol: Bmol.toFixed(2), Vmol: Vmol.toFixed(2),
+    mwDist: mwDist.toFixed(1), mwBots: mwBots.toFixed(1), mwFeed: mwFeed.toFixed(1),
     m, err:null
   };
 }
@@ -1095,7 +1149,7 @@ function buildMasthead() {
   document.getElementById('lp-masthead').innerHTML = `
     <div class="lp-masthead">
       <div class="lp-title">Distillation Column</div>
-      <div class="lp-tagline">Binary separation by vapour–liquid equilibrium</div>
+      <div class="lp-tagline">Binary separation by vapour–liquid equilibrium · v3 (mass balance fix)</div>
       <select class="lp-mix-select" id="mixture-select" onchange="changeMixture(this.value)">
         ${Object.entries(MIXES).map(([k,m])=>
           `<option value="${k}" ${k===state.mix?'selected':''}>${m.name}  (α = ${m.alpha})</option>`
@@ -1263,6 +1317,12 @@ function updateLiveAnalysis() {
   const ratio = (parseFloat(res.Qr)/parseFloat(res.Qc)).toFixed(2);
   const energyText = `Qr/Qc = <span class="analysis-val">${ratio}</span>. Reboiler carries ${ratio > 1 ? 'more' : 'less'} duty than condenser — typical for ${q > 1 ? 'subcooled' : q < 1 ? 'superheated-vapour' : 'saturated'} feed.`;
 
+  // Mass balance breakdown — shows the molar→mass conversion fix
+  const massBalText = `F = ${state.params.feedFlow} kg/h (MW<sub>feed</sub> = ${res.mwFeed} g/mol → ${res.Dmol} + ${res.Bmol} kmol/h).
+    D = <span class="analysis-val">${res.D} kg/h</span> (MW<sub>D</sub> = ${res.mwDist} g/mol),
+    B = <span class="analysis-val">${res.B} kg/h</span> (MW<sub>B</sub> = ${res.mwBots} g/mol).
+    Check: ${(parseFloat(res.D)+parseFloat(res.B)).toFixed(1)} kg/h ≈ ${state.params.feedFlow} kg/h ✓`;
+
   const Tcond_base = res.m.bpL * state.params.distillateComposition + res.m.bpH * (1 - state.params.distillateComposition);
   const overheadSuperheat = (parseFloat(res.Toverhead) - Tcond_base).toFixed(1);
   const superHeatKW = parseFloat(res.QcSensible);
@@ -1290,6 +1350,10 @@ function updateLiveAnalysis() {
       <div class="analysis-row">
         <span class="analysis-label">Feed effect</span>
         <span>${feedEffectText}</span>
+      </div>
+      <div class="analysis-row">
+        <span class="analysis-label">Mass bal.</span>
+        <span>${massBalText}</span>
       </div>
       <div class="analysis-row">
         <span class="analysis-label">Energy</span>
