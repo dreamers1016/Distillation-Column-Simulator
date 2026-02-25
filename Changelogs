@@ -1,0 +1,427 @@
+# Operating Units — Change Log
+
+A running record of modifications to `index.html`, why they were made, and what to look at next.
+
+---
+
+## Version Summary
+
+| Version | Date | Time (MYT) | Theme |
+|---------|------|------------|-------|
+| [v1.1](#v11) | 2026-02-24 | — | Real-Plant Energy Model + SVG Label Overlap Fix |
+| [v1.0](#v10) | 2026-02-24 | — | Split-Pane Redesign — `distillation-v2.html` |
+| [v0.5](#v05) | 2026-02-23 | — | Stream Labels, Utility Flow Display & Reflux Ratio Validation |
+| [v0.4](#v04) | 2026-02-23 | — | Correct Condenser & Reboiler Duties (Trouton Scaling + V′ Stripping Vapour) |
+| [v0.3](#v03) | 2026-02-23 | — | McCabe-Thiele N Calculation + Feed Temperature Energy Balance Fix |
+| [v0.2](#v02) | 2026-02-23 | 16:38 | Clarify Theoretical Stages vs Actual Trays Label |
+| [v0.1](#v01) | — | — | Initial build (baseline) |
+
+---
+
+## v1.1
+
+**Date:** 2026-02-24
+**File:** `distillation-v2.html`
+
+### Overview
+
+Two groups of changes in one session. The first group (Changes 1–6) introduces a **real-plant distillation energy model** — capturing how a hot/vaporous feed actually raises both condenser duty and the operating reflux ratio through two physical mechanisms (overhead superheat and drum-level control). The second group (Change 7) fixes a **SVG label overlap** caused by three grey sub-labels stacking into 5–10 px of vertical space.
+
+---
+
+### Changes 1–6 — Real-Plant Distillation Energy Model
+
+#### Background
+
+The textbook model assumes feed temperature has no effect on the condenser duty (Qc) or the actual reflux ratio seen by the column. In a real plant, a hotter-than-bubble-point feed raises the column temperature profile, which:
+
+1. **Superheats the overhead vapour** → the condenser must remove extra sensible heat to cool the vapour before condensing it, increasing Qc.
+2. **Boils off liquid in the reflux drum** → less liquid is available to return as reflux, so the effective reflux ratio `R_eff` drifts above the set-point `R_set` as drum-level control compensates.
+
+| # | Function / Section | What Changed |
+|---|--------------------|--------------|
+| 1 | `calc()` — core logic | Added `qDev = max(0, q − 1)` (how far feed is above saturated liquid). `R_eff = R × (1 + 0.10 × qDev)` — a 10 % per unit-q effective reflux increase modelling drum-level control. `L = D × R_eff` now uses effective reflux. |
+| 2 | `calc()` — condenser energy | Added `T_overhead = Tcond + 0.10 × max(0, feedTemp − Tb)` — overhead superheat. `QcSensible = V_mol × Cp_vap × (T_overhead − Tcond) / 3600` — sensible cooling duty added to base condensing duty to give total `Qc`. |
+| 3 | `calc()` — return object | `Reff`, `Toverhead`, `QcSensible` now exposed so UI components can access them. |
+| 4 | `buildSVG()` — reflux drum label | `svg-sub-drum-r` text now shows `R = X.XX (set Y.YY)` when `R_eff ≠ R_set` (hot/vapour feed), and plain `R = Y.YY` for saturated-liquid or subcooled feed. New `<text>` element inserted at y=205 (later corrected — see Change 7). |
+| 5 | Reflux drum accordion | Panel now shows `R_eff / Rmin` ratio and the `R_eff` value instead of the set-point ratio, so students see the actual operating margin. |
+| 6 | Live Analysis card — Reflux row | Row now displays both `R_set` and `R_eff`. Feed Effect row dynamically explains the real-plant mechanisms (overhead superheat + drum-level control) for hot feed, or states no correction for cold/saturated feed. |
+
+---
+
+### Change 7 — SVG Label Overlap Fix
+
+#### Background
+
+Change 4 above inserted `svg-sub-drum-r` as a third grey sub-label in the top-right label cluster. The original layout was designed for two grey lines; with three lines at y = 190, 205, 210 (5 px gap between R-line and D-line), the labels completely overlapped at font-size 13 px.
+
+**Before (y positions):**
+
+| Element | y |
+|---------|---|
+| "REFLUX DRUM" title | 160 |
+| "DISTILLATE" title | 180 |
+| L = ... kg/h | 190 |
+| R = X.XX (set Y) | 205 |
+| D value kg/h | 210 ← 5 px from R line |
+
+**After (restructured into two non-overlapping groups, 18 px line-height):**
+
+| Element | y |
+|---------|---|
+| "REFLUX DRUM" title | 143 |
+| L = ... kg/h | 161 |
+| R = X.XX (set Y) | 179 |
+| *(28 px visual gap)* | — |
+| "DISTILLATE" title | 207 |
+| D value kg/h | 225 |
+
+| # | Function / Section | What Changed |
+|---|--------------------|--------------|
+| 7a | `buildSVG()` — `LBL` helper | Added optional `subDy=30` parameter. Sub-label y offset is now `y + subDy` instead of hardcoded `y + 30`. All existing call sites unaffected (default preserved). |
+| 7b | `buildSVG()` — drum/distillate label block | REFLUX DRUM group moved to y=143 with `subDy=18`; leader line moved to y=152. `svg-sub-drum-r` moved to y=179. DISTILLATE group moved to y=207 with `subDy=18`; leader line moved to y=216. |
+
+### Verification
+
+| # | Test | Expected |
+|---|------|----------|
+| 1 | Default load (saturated liquid feed, q=1) | Reflux drum shows `L = xxx kg/h` and `R = Y.YY` — two lines, no overlap |
+| 2 | Hot feed (feedTemp > bubble point) | `svg-sub-drum-r` shows `R = X.XX (set Y.YY)` — both values readable without overlap |
+| 3 | Cold feed (feedTemp < bubble point) | `svg-sub-drum-r` shows plain `R = Y.YY`; L, R, D labels all clearly separated |
+| 4 | All other SVG labels | COLUMN, REBOILER, CONDENSER, FEED, COOLING WATER, BOTTOMS — unchanged |
+| 5 | Vary R slider (hot feed) | `R_eff` in accordion and live analysis both update; diagram label updates |
+| 6 | Error state (R ≤ Rmin×1.05) | All affected labels show `—`; no layout regression |
+
+---
+
+## v1.0
+
+**Date:** 2026-02-24
+**File:** `distillation-v2.html` (new file — `index.html` unchanged)
+
+### Overview
+
+Complete layout redesign from a single full-screen SVG diagram into a **split-pane educational simulator**. The left panel (38%) is an ivory "lab notebook" containing theory, anatomy, live analysis, parameter sliders, and component accordions. The right panel (62%) is a dark-navy "control room" retaining the interactive SVG diagram and results strip.
+
+### Architecture Change
+
+| Aspect | `index.html` (v0.5) | `distillation-v2.html` (v1.0) |
+|--------|---------------------|-------------------------------|
+| Layout | Full-screen SVG + floating drawer | CSS Grid 38/62 split |
+| Parameter controls | Slide-out drawer (`params-panel`) | Always-visible sliders in left panel |
+| Component info | Click SVG → overlay modal | Click SVG → expand accordion in left panel |
+| Theory content | None | Intro paragraph, concept SVG, 7 anatomy items, 4 KaTeX equations |
+| Live analysis | None | 4-row smart card (Difficulty / Reflux / Feed / Energy) |
+| Left panel font | — | Crimson Pro (headers), Lora (body), DM Mono (data), Outfit (UI) |
+| SVG colour palette | Warm cream (light bg) | Dark navy glows on `#0A1628` background |
+
+### New Functions
+
+| Function | Purpose |
+|----------|---------|
+| `buildMasthead()` | Sticky header with Crimson Pro title + mixture select |
+| `buildIntro()` | Intro paragraph + inline SVG concept schematic |
+| `buildAnatomy()` | 7 colour-coded anatomy items with click-to-highlight |
+| `buildEquations()` | 4 KaTeX equations rendered via `rl()` |
+| `buildAnalysisCard()` | Static shell for the live analysis card |
+| `updateLiveAnalysis()` | Rewrites 4 analysis rows from `calc()` output with plain-English interpretation |
+| `buildParamsPanel()` | Renders all sliders in left panel (Column / Feed / Utilities groups) |
+| `buildAccordions()` | 7 accordion component items with equations + live value grid |
+| `toggleAccordion(key)` | Expand/collapse accordion; closes others |
+| `updateAccordionLive(key)` | Refreshes 2×2 live value grid in open accordion |
+| `activateAnatomyItem(key)` | Highlights anatomy item + smooth-scrolls to it |
+| `scrollToAnatomy(compKey)` | Anatomy click → `selectComp()` + open accordion |
+| `buildTopBar()` | Renders flow button + error badge on right panel |
+| `updateErrorBadge()` | Shows/hides `⚠` badge on right panel |
+| `updateAll()` | Orchestrates SVG labels + results + analysis + badge + open accordion |
+| `runBoot()` | Left panel slides in from left; right panel SVG draws in sequentially |
+
+### Unchanged from `index.html` (copied verbatim)
+
+- `MIXES`, `COMP_INFO`, `PARAM_INFO` data objects
+- `calc()` calculation engine (all fixes from v0.3–v0.5 included)
+- `rl()` KaTeX renderer
+- `startFlow()`, `stopFlow()` particle animations
+- `renderParamModal()`, `closeModalAnimated()` (used by ⓘ info buttons only)
+- SVG geometry constants (`CX`, `CY_TOP`, `CW`, `CH`, `CY_BOT`, `FEED_Y`, `PERIM`)
+- `updateSVGLabels()` (all stream label IDs preserved)
+
+### SVG Colour Changes (dark theme)
+
+| Element | `index.html` | `distillation-v2.html` |
+|---------|-------------|------------------------|
+| Outlines (`INK`) | `rgba(28,25,23,0.68)` warm dark | `rgba(232,237,245,0.72)` near-white |
+| Leader lines (`FAINT`) | `rgba(28,25,23,0.20)` | `rgba(232,237,245,0.18)` |
+| Condenser | `#0071e3` Apple blue | `#4FA3E0` lighter blue glow |
+| Reboiler | `#bf4200` deep orange | `#E08A3C` amber glow |
+| Reflux drum | `#6e2fa8` purple | `#A47FD8` light purple glow |
+| CW / Feed | `#1a8038` deep green | `#4EC994` industrial green |
+| Steam | `#7d5200` amber-brown | `#C8A96E` warm gold |
+| Box text fills | `rgba(0,0,0,0.85)` | `rgba(232,237,245,0.88)` |
+| Glow opacity | Subtle (0.06–0.07) | Stronger (0.15–0.18) |
+
+### Two-Way Linking
+
+Clicking a component on the SVG now highlights the matching anatomy item in the left panel and expands its accordion (rather than opening a modal overlay). The reverse path also works: clicking an anatomy item fires `selectComp()` to highlight the SVG component.
+
+### Verification Checklist
+
+| # | Test | Expected |
+|---|------|---------|
+| 1 | Page load | Boot animation: left panel slides in, SVG draws sequentially |
+| 2 | Left panel masthead | Sticky at top when scrolling |
+| 3 | Mixture select | Changes mixture; sliders rebuild; all values update |
+| 4 | Reflux Ratio slider | Live Analysis, SVG labels, results strip all update |
+| 5 | Click condenser on SVG | Anatomy item highlights + accordion expands |
+| 6 | Click "Condenser" anatomy item | SVG condenser highlight activates |
+| 7 | Expand condenser accordion | Shows Qc, CW Flow, Area, LMTD |
+| 8 | Click ⓘ on any slider | Param info modal overlays (ivory background) |
+| 9 | Start Flow button | Particles animate on dark navy SVG |
+| 10 | Push xD/xB to invalid state | Analysis card shows error; badges appear |
+
+---
+
+## v0.5
+
+**Date:** 2026-02-23
+
+### Changes
+
+**1. Stream labels — feed flow and reflux flow added to column SVG**
+
+The feed arrow (left side of column) previously showed only `xF = 0.5` as its sub-label. The reflux drum label (right side) showed only `R = 2.5`. Students had no way to read the actual mass flow rates directly from the diagram — they had to open a modal or look at the bottom results bar.
+
+| Label | Before | After |
+|-------|--------|-------|
+| Feed arrow sub-line | `xF = 0.5` | `F = 1000 kg/h` (updates on flow change) |
+| Feed arrow second line | *(absent)* | `xF = 0.5` (static, updates on composition change) |
+| Reflux drum sub-line | `R = 2.5` | `L = xxx kg/h` (reflux mass flow, updates dynamically) |
+| Reflux drum second line | *(absent)* | `R = 2.5` (updates on R slider) |
+
+**2. Stream labels — cooling water flow and condensate temperature added to utility SVG boxes**
+
+The CW SUPPLY / CW RETURN boxes previously showed only inlet and outlet temperatures. The steam CONDENSATE RETURN box showed no live values at all. Both are now enriched with a flow/temperature value that updates dynamically.
+
+| Element | ID | Content |
+|---------|----|---------|
+| Between CW SUPPLY and RETURN boxes | `svg-cw-flow` | `cwFlow kg/h` — cooling water mass flow rate |
+| Below CONDENSATE RETURN label | `svg-condensate-temp` | `condT°C` — condensate temperature |
+
+Both show `—` in error state.
+
+**3. Reflux ratio validation — q=1 assumption documented**
+
+The Rmin formula was audited against the Underwood equation for binary distillation. Result: the code formula is **algebraically identical** to the correct Underwood result for saturated-liquid feed (q=1). No formula change was required.
+
+A three-line comment was added above the `let Rmin` line in `calc()` to document:
+- The q=1 assumption
+- The algebraic equivalence to Underwood's θ-method
+- The direction of error for subcooled (q>1) and superheated (q<1) feeds
+
+### Changes Table
+
+| # | Function / Section | What Changed |
+|---|--------------------|--------------|
+| 1 | `buildSVG()` — CW boxes | Added `<text id="svg-cw-flow">` at y=148 between supply/return temperature labels |
+| 2 | `buildSVG()` — Steam boxes | Added `<text id="svg-condensate-temp">` at y=772 below CONDENSATE RETURN label |
+| 3 | `buildSVG()` — Feed label | Changed LBL sub-text initial value to `— kg/h`; added raw `<text id="svg-sub-feed-xf">` at `FEED_Y+42` for composition |
+| 4 | `buildSVG()` — Reflux drum label | Changed LBL sub-text initial value to `— kg/h`; added raw `<text id="svg-sub-drum-r">` at y=205 for R ratio |
+| 5 | `updateSVGLabels()` | Added `set()` calls for all 4 new element IDs; updated `svg-sub-feed` → `F = xxx kg/h`, `svg-sub-drum` → `L = xxx kg/h` |
+| 6 | `calc()` — Rmin line | Added 3-line comment above `let Rmin` documenting q=1 assumption and Underwood equivalence |
+
+### Verification
+
+| # | Test | Expected |
+|---|------|----------|
+| 1 | Load page defaults | CW flow rate shown between CW SUPPLY/RETURN boxes |
+| 2 | Load page defaults | Condensate temp shown below CONDENSATE RETURN label |
+| 3 | Load page defaults | Feed arrow shows `F = 1000 kg/h` and `xF = 0.5` on two lines |
+| 4 | Load page defaults | Reflux drum shows `L = xxx kg/h` and `R = 2.5` on two lines |
+| 5 | Change CW sliders | `svg-cw-flow` updates; CW temps update as before |
+| 6 | Change feed flow slider | Feed flow label updates; feed composition label unchanged |
+| 7 | Change R slider | Reflux drum shows updated `L kg/h` and `R = new value` |
+| 8 | Change steam pressure | Condensate temp (`condT`) updates on diagram |
+| 9 | Trigger error state | All new labels show `—` gracefully |
+| 10 | Inspect source | 3-line Rmin comment present above `let Rmin` in `calc()` |
+
+---
+
+## v0.4
+
+**Date:** 2026-02-23
+
+### Problems Fixed
+
+**1. Single λ (m.lam) used for both condenser and reboiler (wrong temperature)**
+
+v0.3 used a single feed-average latent heat `m.lam` for both `QcKJ = Vmol × m.lam` and the Qr formula. In reality, latent heat is temperature-dependent — the condenser runs at the distillate bubble point `Tcond` (cool, light-rich) and the reboiler at the bottoms bubble point `Treb` (hot, heavy-rich). Applying one λ to both duties systematically underestimates `Qc` (condenser is cooler → lower λ than feed-average) and overestimates or underestimates `Qr` depending on composition.
+
+**Fix:** Apply Trouton's rule (`λ ∝ T_bp [K]`) scaled against `m.lam` at the feed bubble point `Tb`:
+
+```
+λ_cond = m.lam × (Tcond + 273.15) / (Tb + 273.15)
+λ_reb  = m.lam × (Treb  + 273.15) / (Tb + 273.15)
+```
+
+**2. 1.08 heat-loss factor misapplied — applied only to the rectifying portion, not the total stripping duty**
+
+The v0.3 Qr formula `Qr = Qc × 1.08 + F·λ·(q−1)/3600` split the calculation into two terms with 1.08 only on `Qc`. But the reboiler must generate V′ = V + (q−1)·F mol/h of vapour (from the q-line mass balance). The 1.08 heat-loss factor must apply to the **entire** reboiler duty, not just the rectifying-section part:
+
+```
+Qr = V′_mol · λ_reb / 3600 × 1.08
+```
+
+### Changes
+
+| # | Function / Section | What Changed |
+|---|--------------------|--------------|
+| 1 | `calc()` — early block | Added `Tcond`, `Treb` (section bubble-point temperatures) and `lamCond`, `lamReb` (Trouton-scaled latent heats) immediately after `qVal`, so they are available for both the energy balance and the LMTD section |
+| 2 | `calc()` — energy balance | `QcKJ` now uses `lamCond` (not `m.lam`). Added `Fmol` and `Vprime_mol = Vmol + (q−1)·Fmol`. `Qr = Vprime_mol·lamReb/3600 × 1.08` — 1.08 factor now covers the total stripping-section vapour |
+| 3 | `calc()` — LMTD section | Removed the duplicate `const Tcond` and `const Treb` declarations that were re-computed here; they are now single-declared in the early block and remain in scope |
+
+### Derivation note
+
+| q | V′ | λ_reb vs λ_cond | Net effect |
+|---|-----|-----------------|------------|
+| q=1, xD high, xB low | V′=V | λ_reb > λ_cond | Qr > Qc × 1.08 even with saturated-liquid feed |
+| q>1 (subcooled) | V′>V | λ_reb > λ_cond | Qr rises further |
+| q<1 (superheated) | V′<V | λ_reb > λ_cond | partial offset |
+| xD≈xF≈xB (symmetric) | Tcond≈Treb≈Tb | λ_reb≈λ_cond≈m.lam | Qr → Qc×1.08 (regression ✓) |
+
+### Verification
+
+| # | Test | Expected |
+|---|------|----------|
+| 1 | Feed temp = bubble point, symmetric composition | Qr ≈ Qc × 1.08 (near-regression; small diff from λ scaling) |
+| 2 | Benzene-toluene, xD=0.95, xB=0.05, default feed | Qr/Qc ratio > 1.08 (λ_reb > λ_cond) |
+| 3 | Feed temp 20 °C below bubble point (subcooled) | Qr increases, Qc unchanged |
+| 4 | Feed temp 20 °C above bubble point (superheated) | Qr decreases, Qc unchanged |
+| 5 | Vary feed temp only (fixed R, xD, xB, xF, F) | Qc stays fixed — condenser sees V, not V′ |
+| 6 | R ≤ Rmin×1.05 | Error message fires, no regression |
+| 7 | Extreme compositions (xD≈0.99, xB≈0.01) | Large λ scaling correction; no NaN / divide-by-zero |
+
+---
+
+## v0.3
+
+**Date:** 2026-02-23
+
+### Problems Fixed
+
+**1. N was calculated via Gilliland correlation (empirical shortcut)**
+The Gilliland correlation gives a quick chart-based approximation but is a black-box to students. For a pedagogical binary distillation simulator the graphical McCabe-Thiele stage-stepping approach is both more accurate and physically transparent — students can see exactly how each equilibrium step is counted.
+
+**2. Feed temperature had no effect on Qr (bug)**
+`qVal` (feed thermal condition) was computed on line 530, but `Qr` was assigned on line 519 as `Qc × 1.08` — a hardcoded scalar that never referenced `qVal`. The energy balance completely ignored feed enthalpy. Physically, a subcooled feed (q > 1) demands extra reboiler heat; a superheated-vapour feed (q < 0) saves heat. The old code treated all feeds identically.
+
+### Changes
+
+| # | Function / Section | What Changed |
+|---|--------------------|--------------|
+| 1 | `calc()` — variable ordering | Moved `lamMass`, `Tb`, `qVal` to immediately after parameter destructuring so they are available for the `Qr` formula |
+| 2 | `calc()` — `Qr` formula | Changed `Qr = Qc * 1.08` → `Qr = Qc * 1.08 + (F * lamMass * (qVal - 1)) / 3600`. The new term is the thermodynamically correct feed-enthalpy correction: q > 1 increases Qr, q < 1 decreases Qr, q = 1 leaves Qr unchanged |
+| 3 | `calc()` — stage count | Removed Gilliland variables (`X`, `exp_arg`, `Y`, `Math.ceil`). Replaced with McCabe-Thiele stage stepping: compute rectifying operating line, locate feed-stage x-coordinate via q-line intersection, compute stripping operating line, then step from xD to xB using equilibrium curve inverse (`x = y / (α − (α−1)y`) |
+
+### Derivation note for Qr correction
+
+`qVal = (λ_mass + cp(Tb − Tf)) / λ_mass`  →  `cp(Tb − Tf) = λ_mass(q − 1)`
+
+Extra reboiler heat from feed condition = `F [kg/h] × λ_mass [kJ/kg] × (q − 1) / 3600` [kW]
+
+The `× 1.08` factor is retained for heat losses.
+
+### Verification
+
+| # | Test | Expected |
+|---|------|----------|
+| 1 | Load page, default parameters | N displays a reasonable stage count (≥ Nmin) |
+| 2 | Feed temperature slider cold (20 °C below bubble point) | Qr **increases**, Qc unchanged |
+| 3 | Feed temperature slider hot (20 °C above bubble point) | Qr **decreases** |
+| 4 | Feed temp = bubble point | Qr ≈ Qc × 1.08 (regression: same as old behaviour) |
+| 5 | Move R slider | N updates via McCabe-Thiele; verify N ≥ Nmin |
+| 6 | R ≤ Rmin × 1.05 | Error message fires correctly |
+| 7 | Extreme compositions (xF near xD or xB) | No divide-by-zero / infinite loop (N capped at 200) |
+
+---
+
+## v0.2
+
+**Date:** 2026-02-23 · 16:38 MYT
+
+**Problem:** Students were confused by the SVG column label showing `N = 7` on one line and `10 actual trays` on the next. It was not obvious that N is a *theoretical* value derived from the Gilliland correlation, and that the tray count is a *physical* result obtained by dividing through Murphree tray efficiency.
+
+### Changes
+
+| # | Function / Section | File Location | What Changed |
+|---|--------------------|---------------|--------------|
+| 1 | `buildSVG()` | lines 733–740 | Reduced font-size 18 → 14 on both existing label lines. Added 3rd SVG text element `lbl-stages3` — a blue underlined ⓘ link that calls `showParamInfo('stages')` on click. |
+| 2 | `updateSVGLabels()` | lines 978–979 | Line 1 now appends `" theoretical"` (e.g. `N = 7 theoretical`). Line 2 now shows derivation arrow and efficiency (e.g. `→ 10 trays  (η = 70%)`). |
+| 3 | `PARAM_INFO.stages` | line 498 | Replaced generic one-liner with a full student-facing three-part explanation: definition of a theoretical stage, Murphree efficiency worked example (N=7 → 10 trays), and capital cost implication. |
+| 4 | Boot animation | line 862 | Added `#lbl-stages3` to the fade-in array so the ⓘ link animates in with the other two label lines. |
+
+### Result
+
+Column label after change:
+```
+N = 7 theoretical
+→ 10 trays  (η = 70%)
+ⓘ what does this mean?
+```
+
+### Verification
+
+| # | Test | Expected |
+|---|------|----------|
+| 1 | Open page, wait for boot animation | All 3 label lines visible |
+| 2 | Click ⓘ link | Modal opens with "Theoretical Stages vs. Actual Trays" title |
+| 3 | Move R slider | N and tray count update; wording stays consistent |
+| 4 | Push R to error state (R ≤ Rmin × 1.05) | Lines 1 & 2 show dashes; ⓘ link remains visible |
+
+---
+
+## v0.1
+
+**Date:** baseline (pre-changelog)
+
+### Initial Build
+
+| Component | Description |
+|-----------|-------------|
+| SVG diagram | Process flow diagram — column, condenser, reboiler, feed pump, utility streams |
+| Calculation engine | McCabe-Thiele / Gilliland correlation |
+| Boot animation | Sequential fade-in sequence via anime.js |
+| Parameter modal | `PARAM_INFO` object + `showParamInfo()` function |
+| Interactive sliders | R, xF, xD, xB, feed temperature, pressure, utility temperatures |
+
+---
+
+## Future Improvements
+
+### UX / Pedagogy
+
+| Priority | Idea | Description |
+|----------|------|-------------|
+| High | Stage-by-stage visualisation | Animate individual equilibrium steps on a McCabe-Thiele diagram so students can see how N is counted graphically. |
+| High | Error state messaging | When R ≤ Rmin the label shows dashes but no explanation. A tooltip explaining *why* separation fails would help. |
+| Medium | Efficiency toggle | Let students switch η between 60%, 70%, 80% and watch actual tray count change live, reinforcing the N / η relationship. |
+| Low | Mobile layout | SVG currently overflows on screens narrower than ~900 px. |
+
+### Calculations
+
+| Priority | Idea | Description |
+|----------|------|-------------|
+| High | Variable Murphree efficiency | Currently hardcoded at 70%. Allow user input or tie it to a tray-type dropdown (sieve, valve, bubble-cap). |
+| Medium | ~~Feed condition q~~ *(done v0.3)* | ~~q is inferred from feed temperature; expose it explicitly so students can see subcooled / two-phase feeds.~~ Feed temperature now correctly drives Qr via thermodynamic energy balance. |
+| Medium | Fenske minimum stages | Display Nmin alongside N so students understand the reflux–stages trade-off; Nmin is retained in the return object but not yet shown in the SVG. |
+
+### Code Quality
+
+| Priority | Idea | Description |
+|----------|------|-------------|
+| Medium | Extract calculation engine | Gilliland/McCabe logic is self-contained but long. Moving to a separate `calc.js` would make unit testing feasible. |
+| Low | `PARAM_INFO` to JSON | Externalising modal content would make it easier to translate or extend without touching JS. |
+| Low | Accessibility | SVG text elements have no `aria-label`; screen readers skip the diagram entirely. |
+
+---
+
+*Last updated: 2026-02-24 (v1.1)*
