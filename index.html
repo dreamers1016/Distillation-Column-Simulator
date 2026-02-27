@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Distillation Column v3 — CFB2032</title>
+  <title>Distillation Column v4 — CFB2032</title>
+  <script src="https://mcp.figma.com/mcp/html-to-design/capture.js" async></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400&family=Lora:wght@400;500&family=DM+Mono:wght@400;500&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
@@ -45,12 +46,34 @@
   --ink-steam:  #7A5A20;
   --ink-drum:   #6040A0;
   --ink-col:    #3A4A5A;
+
+  /* Responsive layout */
+  --bp-desktop: 1024px;
+  --tab-bar-h: 56px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+
+  /* Spacing scale */
+  --sp-micro: 0.20rem;
+  --sp-xs: 0.35rem;
+  --sp-sm: 0.65rem;
+  --sp-md: 0.90rem;
+  --sp-lg: 1.25rem;
+  --sp-xl: 1.50rem;
 }
 
-html, body { height: 100%; overflow: hidden; }
+html, body { height: 100%; }
 body { font-family: 'Outfit', sans-serif; background: var(--rp-bg); }
 
-#app { height: 100vh; width: 100vw; overflow: hidden; opacity: 0; }
+#app { height: 100vh; height: 100dvh; width: 100vw; overflow: hidden; opacity: 0; }
+
+@media (min-width: 1024px) {
+  html, body { overflow: hidden; }
+  #app { height: 100vh; }
+}
+@media (max-width: 1023px) {
+  html, body { overflow: hidden; height: 100dvh; }
+  #app { height: 100dvh; }
+}
 
 /* ── SPLIT LAYOUT ── */
 .split-layout {
@@ -58,6 +81,9 @@ body { font-family: 'Outfit', sans-serif; background: var(--rp-bg); }
   grid-template-columns: 38% 62%;
   height: 100vh;
   overflow: hidden;
+}
+@media (max-width: 1023px) {
+  .split-layout { display: none !important; }
 }
 
 /* ── LEFT PANEL ── */
@@ -90,6 +116,7 @@ body { font-family: 'Outfit', sans-serif; background: var(--rp-bg); }
   padding: 0 0 2rem 0;
   scrollbar-width: thin;
   scrollbar-color: rgba(26,22,18,0.15) transparent;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* ── RIGHT PANEL ── */
@@ -543,11 +570,331 @@ input[type="range"]::-webkit-slider-thumb {
 /* ── SVG HOVER ── */
 .comp-g { cursor: pointer; }
 .comp-g .hl { opacity: 0; transition: opacity 0.18s; pointer-events: none; }
-.comp-g:hover .hl { opacity: 1; }
+.comp-g:hover .hl, .comp-g:active .hl { opacity: 1; }
+
+/* ── TOUCH OPTIMIZATIONS ── */
+button, input[type="range"], select, label, .accordion-trigger, .info-btn, .flow-btn {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.info-btn:hover, .info-btn:active { background: var(--ink-dist); color: #fff; border-color: var(--ink-dist); }
+.anatomy-item:hover, .anatomy-item:active { background: rgba(26,22,18,0.05); }
+.accordion-trigger:hover, .accordion-trigger:active { background: rgba(26,22,18,0.04); }
+.accordion-trigger.open:hover, .accordion-trigger.open:active { background: rgba(26,22,18,0.05); }
+.modal-close:hover, .modal-close:active { background: rgba(26,22,18,0.12); }
+.flow-btn:hover, .flow-btn:active { filter: brightness(1.08); }
+
+/* ── TOAST NOTIFICATION ── */
+.toast {
+  position: fixed; top: 0.75rem; left: 50%;
+  transform: translateX(-50%) translateY(-140%);
+  z-index: 9999;
+  background: rgba(28,10,10,0.96);
+  border: 1px solid rgba(224,112,112,0.40);
+  border-radius: 8px; color: #E07070;
+  font-family: 'DM Mono', monospace; font-size: 0.78rem;
+  padding: 0.55rem 1rem; white-space: nowrap;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.40);
+  transition: transform 0.28s cubic-bezier(0.34,1.56,0.64,1);
+  pointer-events: none;
+}
+.toast.visible {
+  transform: translateX(-50%) translateY(0);
+  pointer-events: auto;
+}
+
+/* ── MOBILE TAB SYSTEM ── */
+.tab-radio { display: none; }
+@media (max-width: 1023px) {
+  .tab-panel {
+    display: none;
+    height: calc(100dvh - var(--tab-bar-h) - var(--safe-bottom));
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    background: var(--lp-bg);
+  }
+  #t-controls:checked ~ #app #panel-controls,
+  #t-diagram:checked  ~ #app #panel-diagram,
+  #t-results:checked  ~ #app #panel-results,
+  #t-learn:checked    ~ #app #panel-learn { display: block; }
+
+  .tab-bar {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    height: var(--tab-bar-h);
+    padding-bottom: var(--safe-bottom);
+    display: flex;
+    background: var(--rp-bg);
+    border-top: 1px solid var(--rp-border);
+    z-index: 100;
+  }
+  .tab-btn {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    font-family: 'Outfit', sans-serif; font-size: 0.68rem;
+    color: var(--rp-text2); cursor: pointer;
+    transition: color 0.15s;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    border-top: 2px solid transparent;
+  }
+  #t-controls:checked ~ #app .tab-bar label[for="t-controls"],
+  #t-diagram:checked  ~ #app .tab-bar label[for="t-diagram"],
+  #t-results:checked  ~ #app .tab-bar label[for="t-results"],
+  #t-learn:checked    ~ #app .tab-bar label[for="t-learn"] {
+    color: var(--c-dist);
+    border-top-color: var(--c-dist);
+  }
+}
+@media (min-width: 1024px) {
+  .tab-bar, .tab-panel { display: none !important; }
+}
+
+/* ── TIER DETAILS (expandable groups) ── */
+.tier-details { border-top: 1px solid var(--lp-border); margin-top: 0.5rem; }
+.tier-summary {
+  font-family: 'DM Mono', monospace; font-size: 0.68rem;
+  text-transform: uppercase; letter-spacing: 0.10em;
+  color: var(--lp-text3); padding: 0.6rem 0 0.35rem;
+  cursor: pointer; list-style: none; display: flex;
+  justify-content: space-between; align-items: center;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.tier-summary::-webkit-details-marker { display: none; }
+.tier-summary::after { content: '▾'; transition: transform 0.2s; display: inline-block; }
+.tier-details[open] .tier-summary::after { transform: rotate(180deg); }
+.tier-body { padding-top: 0.25rem; }
+@media (min-width: 1024px) {
+  .tier-details { display: block !important; }
+  .tier-body { display: block !important; }
+  .tier-summary { pointer-events: none; }
+  .tier-summary::after { display: none; }
+}
+
+/* ── PARAMETER CATEGORY BORDERS ── */
+.param-row[data-cat="mb"]   { border-left: 3px solid #4FA3E0; padding-left: 0.6rem; }
+.param-row[data-cat="en"]   { border-left: 3px solid #E08A3C; padding-left: 0.6rem; }
+.param-row[data-cat="both"] { border-left: 3px solid #A47FD8; padding-left: 0.6rem; }
+
+/* ── SENSITIVITY DOTS ── */
+.snbadge { font-size: 0.58rem; letter-spacing: -0.04em; margin-left: 0.25rem; }
+.snbadge.crit { color: #E07070; }
+.snbadge.high { color: #C8A96E; }
+.snbadge.med  { color: var(--lp-text3); }
+
+/* ── NEAR-RMIN WARNING ── */
+.slider-warn input[type="range"]::-webkit-slider-thumb {
+  background: #C8A96E;
+  box-shadow: 0 0 0 3px rgba(200,169,110,0.30);
+}
+.slider-warn .param-val { color: #C8A96E; }
+.slider-warn .param-label { color: #C8A96E; }
+
+/* ── AT-A-GLANCE CARD ── */
+.glance-card {
+  background: rgba(26,22,18,0.04);
+  border: 1px solid var(--lp-border2);
+  border-radius: 8px;
+  padding: 0.65rem 1rem;
+  margin-bottom: 0.75rem;
+}
+.glance-row { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+.glance-item { display: flex; flex-direction: column; flex: 1; min-width: 70px; }
+.glance-lbl {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.60rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--lp-text3);
+  display: block;
+}
+.glance-val {
+  font-family: 'DM Mono', monospace;
+  font-size: 1.05rem;
+  font-weight: 500;
+  color: var(--lp-text);
+}
+.glance-status {
+  font-family: 'Outfit', sans-serif;
+  font-size: 0.78rem;
+  margin-top: 0.4rem;
+  color: var(--lp-text2);
+}
+
+/* ── MOBILE PANEL SPECIFIC ── */
+#panel-diagram {
+  background: var(--rp-bg);
+  color: var(--rp-text);
+}
+#m-topbar {
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1.5rem;
+  border-bottom: 1px solid var(--rp-border);
+  flex-shrink: 0;
+}
+#m-svg {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 0.5rem;
+}
+#m-svg svg { width: 100% !important; height: auto !important; max-height: none !important; }
+
+/* Mobile SVG: reveal all elements that desktop boot animation would show */
+#m-svg [opacity="0"],
+#m-svg g[opacity="0"],
+#m-svg text[opacity="0"],
+#m-svg rect[opacity="0"],
+#m-svg line[opacity="0"],
+#m-svg ellipse[opacity="0"] { opacity: 1 !important; }
+#m-svg #col-box, #m-svg #cnd-box, #m-svg #reb-box, #m-svg #drum-box,
+#m-svg #cw-sup-box, #m-svg #cw-ret-box, #m-svg #stm-box, #m-svg #cnd-ret-box {
+  stroke-dashoffset: 0 !important;
+}
+/* Keep particles invisible until flow starts */
+#m-svg .pv, #m-svg .plc, #m-svg .pcd, #m-svg .prf,
+#m-svg .pdi, #m-svg .pf, #m-svg .pld, #m-svg .prv,
+#m-svg .pb, #m-svg .pci, #m-svg .pco, #m-svg .psi, #m-svg .pso { opacity: 0 !important; }
+#panel-diagram #pipes-group { opacity: 0.9 !important; }
+
+.m-results-strip {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  padding: 0.75rem 1rem;
+  border-top: 1px solid var(--rp-border);
+  gap: 0.5rem;
+  background: rgba(255,255,255,0.025);
+}
+.m-results-strip .result-item {
+  border-right: none;
+  padding-right: 0;
+}
+
+/* ── KEY OUTPUTS CARD (mobile Results tab) ── */
+.key-outputs-card {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  background: rgba(26,22,18,0.04);
+  border: 1px solid var(--lp-border2);
+  border-radius: 8px;
+  overflow: hidden;
+  margin: 1rem;
+}
+.key-outputs-col { padding: 0.75rem 1rem; }
+.key-outputs-col:first-child { border-right: 1px solid var(--lp-border); }
+.key-outputs-col-title {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.60rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--lp-text3);
+  margin-bottom: 0.5rem;
+}
+.key-outputs-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 0.15rem 0;
+}
+.key-outputs-lbl {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.65rem;
+  color: var(--lp-text3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.key-outputs-val {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--lp-text);
+}
+
+/* ── MOBILE MASTHEAD (Controls tab) ── */
+.m-masthead-wrap {
+  position: sticky; top: 0; z-index: 50;
+  background: rgba(245,240,232,0.97);
+  border-bottom: 1px solid var(--lp-border);
+  padding: 0.6rem 1rem;
+}
+.m-section { padding: 0.9rem 1rem; border-bottom: 1px solid var(--lp-border); }
+
+/* ── McCabe-Thiele Sidebar ── */
+.svg-mt-row {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  overflow: hidden;
+  min-height: 0;
+}
+#svg-container  { flex: 1 1 0; min-width: 0; transition: flex 0.25s ease; }
+#mt-panel       { flex: 0 0 0; overflow: hidden; transition: flex 0.25s ease; }
+#right-panel.mt-open #mt-panel {
+  flex: 0 0 45%;
+  border-left: 1px solid rgba(255,255,255,0.07);
+}
+
+/* M-T panel internals */
+.mt-panel-inner {
+  display: flex; flex-direction: column;
+  width: 100%; height: 100%;
+  background: var(--rp-bg);
+}
+.mt-panel-header {
+  display: flex; align-items: baseline; gap: 0.5rem;
+  padding: 0.55rem 0.75rem 0.4rem;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  flex-shrink: 0;
+}
+.mt-panel-title {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.70rem; text-transform: uppercase;
+  letter-spacing: 0.10em; color: var(--rp-text2);
+}
+.mt-panel-sub {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.63rem; color: rgba(136,153,170,0.50);
+  flex: 1;
+}
+.mt-close-btn {
+  background: none; border: none; color: var(--rp-text2);
+  cursor: pointer; font-size: 0.85rem; padding: 0 0.2rem;
+  line-height: 1; margin-left: auto;
+}
+.mt-close-btn:hover { color: var(--rp-text); }
+.mt-body {
+  flex: 1; overflow: hidden; padding: 0.4rem;
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* M-T toggle button */
+.mt-btn {
+  font-family: 'Outfit', sans-serif; font-size: 0.78rem; font-weight: 500;
+  background: rgba(164,127,216,0.12);
+  border: 1px solid rgba(164,127,216,0.30);
+  color: #A47FD8;
+  padding: 0.25rem 0.85rem; border-radius: 5px;
+  cursor: pointer; transition: background 0.15s, border-color 0.15s;
+}
+.mt-btn:hover  { background: rgba(164,127,216,0.22); }
+.mt-btn.active { background: rgba(164,127,216,0.28); border-color: rgba(164,127,216,0.55); }
   </style>
 </head>
 <body>
+<!-- CSS radio trick: these must be siblings of #app for ~ selector to reach tab panels -->
+<input type="radio" name="tab" id="t-controls" class="tab-radio" checked>
+<input type="radio" name="tab" id="t-diagram"  class="tab-radio">
+<input type="radio" name="tab" id="t-results"  class="tab-radio">
+<input type="radio" name="tab" id="t-learn"    class="tab-radio">
+
+<!-- Toast notification -->
+<div class="toast" id="toast"></div>
+
 <div id="app">
+  <!-- Desktop split layout (≥1024px) -->
   <div class="split-layout">
     <!-- LEFT: Theory + Controls -->
     <div class="left-panel" id="left-panel">
@@ -557,6 +904,7 @@ input[type="range"]::-webkit-slider-thumb {
         <div id="lp-anatomy"></div>
         <div id="lp-equations"></div>
         <div id="lp-analysis"></div>
+        <div id="lp-glance" style="padding:0 1.5rem 0;"></div>
         <div id="lp-params"></div>
         <div id="lp-accordions"></div>
         <div class="left-footer">
@@ -571,6 +919,43 @@ input[type="range"]::-webkit-slider-thumb {
       <div class="results-strip" id="results-bar"></div>
     </div>
   </div>
+
+  <!-- Mobile tab panels (<1024px) -->
+  <div class="tab-panel" id="panel-controls">
+    <div id="m-masthead"></div>
+    <div style="padding:0.75rem 1rem 0;"><div id="m-glance"></div></div>
+    <div id="m-params"></div>
+    <div id="m-analysis"></div>
+    <div style="height:0.5rem;"></div>
+  </div>
+
+  <div class="tab-panel" id="panel-diagram">
+    <div id="m-topbar"></div>
+    <div id="m-svg"></div>
+    <div id="m-results"></div>
+  </div>
+
+  <div class="tab-panel" id="panel-results">
+    <div id="m-keyoutputs"></div>
+    <div id="m-analysis-full"></div>
+    <div style="height:0.5rem;"></div>
+  </div>
+
+  <div class="tab-panel" id="panel-learn">
+    <div id="m-intro"></div>
+    <div id="m-anatomy"></div>
+    <div id="m-equations"></div>
+    <div id="m-accordions"></div>
+    <div style="height:0.5rem;"></div>
+  </div>
+
+  <!-- Bottom tab bar (mobile only) -->
+  <nav class="tab-bar">
+    <label for="t-controls" class="tab-btn">Controls</label>
+    <label for="t-diagram"  class="tab-btn">Diagram</label>
+    <label for="t-results"  class="tab-btn">Results</label>
+    <label for="t-learn"    class="tab-btn">Learn</label>
+  </nav>
 </div>
 <div id="modal-container"></div>
 
@@ -587,9 +972,32 @@ window.closeParamModal = () => closeModalAnimated();
 window.toggleAccordion = toggleAccordion;
 window.scrollToAnatomy = scrollToAnatomy;
 
+// ── BREAKPOINT HELPER ────────────────────────────────────────────────────
+const isDesktop = () => window.innerWidth >= 1024;
+
+// ── DUAL-PANEL RENDER HELPER ─────────────────────────────────────────────
+function renderTo(desktopId, mobileId, html) {
+  const d = document.getElementById(desktopId);
+  const m = document.getElementById(mobileId);
+  if (d) d.innerHTML = html;
+  if (m) m.innerHTML = html;
+}
+
+// ── TOAST NOTIFICATION ───────────────────────────────────────────────────
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  if (!t) return;
+  t.textContent = '\u26a0 ' + msg;
+  t.classList.add('visible');
+}
+function clearToast() {
+  const t = document.getElementById('toast');
+  if (t) t.classList.remove('visible');
+}
+
 // ── STATE ──────────────────────────────────────────────────────────────────
 const state = {
-  mix:'methanol-water', showFlow:false,
+  mix:'methanol-water', showFlow:false, showMT:false,
   selectedComp:null, showParamInfo:null,
   flowAnims:[], pulseAnims:[], prevVals:{},
   params:{
@@ -722,16 +1130,21 @@ function calc() {
   const yFeed     = rectSlope * xFeed + rectInt;
   const stripSlope = (yFeed - xB) / (xFeed - xB);
   const stripInt   = xB * (1 - stripSlope);
-  let y = xD;
-  let N = 0;
+  let y = xD, N = 0, feedStage = null;
+  const stageComps = [];
   while (y > xB + 1e-6 && N < 200) {
     const xEq = y / (m.alpha - (m.alpha - 1) * y);
     N++;
-    if (xEq <= xB + 1e-6) break;
-    y = (xEq >= xFeed)
+    const aboveFeed = (xEq >= xFeed);
+    if (feedStage === null && !aboveFeed) feedStage = N;
+    const yOp = aboveFeed
       ? rectSlope * xEq + rectInt
       : stripSlope * xEq + stripInt;
+    stageComps.push({ stage: N, yTop: y, xEq, yOp });
+    if (xEq <= xB + 1e-6) break;
+    y = yOp;
   }
+  if (feedStage === null) feedStage = N;
   const Na = Math.ceil(N / 0.70);
 
   // ── STEP 8: Utility flows ────────────────────────────────────────────────
@@ -767,6 +1180,14 @@ function calc() {
     // Expose molar flows for advanced display
     Dmol: Dmol.toFixed(2), Bmol: Bmol.toFixed(2), Vmol: Vmol.toFixed(2),
     mwDist: mwDist.toFixed(1), mwBots: mwBots.toFixed(1), mwFeed: mwFeed.toFixed(1),
+    // McCabe-Thiele diagram data
+    stageComps, feedStage,
+    rectSlope, rectInt,
+    stripSlope, stripInt,
+    qVal,
+    xFeed, yFeed,
+    xB_raw: xB, xF_raw: xF, xD_raw: xD,
+    alpha: m.alpha,
     m, err:null
   };
 }
@@ -1047,7 +1468,11 @@ function buildSVG() {
 // ── UPDATE SVG LABELS ─────────────────────────────────────────────────────
 function updateSVGLabels() {
   const res = calc();
-  const set = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+  // Use querySelectorAll with attribute selector to update ALL matching elements
+  // (handles both desktop and mobile SVG copies which share the same IDs)
+  const set = (id, text) => {
+    document.querySelectorAll('[id="' + id + '"]').forEach(el => { el.textContent = text; });
+  };
   set('svg-sub-distillate', res.err ? '—' : res.D  + ' kg/h');
   set('svg-sub-drum',       res.err ? '—' : 'L = ' + res.L + ' kg/h');
   set('svg-sub-drum-r',     res.Reff !== state.params.refluxRatio.toFixed(2)
@@ -1099,15 +1524,301 @@ function stopFlow() {
 
 // ── TOP BAR ───────────────────────────────────────────────────────────────
 function buildTopBar() {
-  document.getElementById('right-topbar').innerHTML = `
+  const html = `
     <button class="flow-btn" id="btn-flow" onclick="toggleFlow()">Start Flow</button>
-    <div id="error-area"></div>`;
+    <button class="mt-btn" id="btn-mt" onclick="toggleMT()">M-T Diagram</button>`;
+  document.getElementById('right-topbar').innerHTML = html;
+  // Mobile diagram tab topbar
+  const mob = document.getElementById('m-topbar');
+  if (mob) mob.innerHTML = `
+    <button class="flow-btn" id="btn-flow-m" onclick="toggleFlow()">Start Flow</button>
+    <button class="mt-btn" id="btn-mt-m" onclick="toggleMT()">M-T</button>`;
+}
+
+// ── McCabe-Thiele TOGGLE & LAYOUT ─────────────────────────────────────────
+function toggleMT() {
+  state.showMT = !state.showMT;
+  const btn = document.getElementById('btn-mt');
+  if (btn) btn.classList.toggle('active', state.showMT);
+  const mBtn = document.getElementById('btn-mt-m');
+  if (mBtn) mBtn.classList.toggle('active', state.showMT);
+  applyMTLayout();
+  if (state.showMT) updateMT();
+}
+
+function applyMTLayout() {
+  const rp = document.getElementById('right-panel');
+  const mtPanel = document.getElementById('mt-panel');
+
+  if (state.showMT) {
+    rp.classList.add('mt-open');
+  } else {
+    rp.classList.remove('mt-open');
+  }
+
+  // Mobile: show/hide m-mt-panel below m-svg
+  const mMT = document.getElementById('m-mt-panel');
+  if (mMT) mMT.style.display = state.showMT ? 'block' : 'none';
+}
+
+// ── McCabe-Thiele PANEL BUILD ──────────────────────────────────────────────
+function buildMTPanel() {
+  // Wrap #svg-container in a .svg-mt-row flex row
+  const rp = document.getElementById('right-panel');
+  const svgCont = document.getElementById('svg-container');
+  const resultsBar = document.getElementById('results-bar');
+
+  // Create the wrapper row
+  const row = document.createElement('div');
+  row.className = 'svg-mt-row';
+  rp.insertBefore(row, svgCont);
+  row.appendChild(svgCont);
+
+  // Desktop M-T panel (sibling of svg-container inside row)
+  const panel = document.createElement('div');
+  panel.id = 'mt-panel';
+  panel.innerHTML = `
+    <div class="mt-panel-inner">
+      <div class="mt-panel-header">
+        <span class="mt-panel-title">McCabe–Thiele</span>
+        <span class="mt-panel-sub" id="mt-subtitle"></span>
+        <button class="mt-close-btn" onclick="toggleMT()">✕</button>
+      </div>
+      <div class="mt-body">
+        <svg id="mt-svg" viewBox="0 0 380 360"
+             style="width:100%;height:100%;display:block;overflow:visible;"></svg>
+      </div>
+    </div>`;
+  row.appendChild(panel);
+
+  // Mobile M-T panel (appended to mobile diagram panel)
+  const mSvgPanel = document.getElementById('panel-diagram');
+  if (mSvgPanel) {
+    const mPanel = document.createElement('div');
+    mPanel.id = 'm-mt-panel';
+    mPanel.style.display = 'none';
+    mPanel.innerHTML = `
+      <div class="mt-panel-inner" style="height:420px;padding:0.5rem;">
+        <div class="mt-panel-header">
+          <span class="mt-panel-title">McCabe–Thiele</span>
+          <span class="mt-panel-sub" id="m-mt-subtitle"></span>
+        </div>
+        <div class="mt-body">
+          <svg id="m-mt-svg" viewBox="0 0 380 360"
+               style="width:100%;height:auto;display:block;overflow:visible;"></svg>
+        </div>
+      </div>`;
+    mSvgPanel.appendChild(mPanel);
+  }
+}
+
+function updateMT() {
+  if (!state.showMT) return;
+  const res = calc();
+  renderMcCabeThiele('mt-svg', res);
+  renderMcCabeThiele('m-mt-svg', res);
+  const sub = res.err ? '' : `N = ${res.N} stages  ·  feed @ stage ${res.feedStage}`;
+  ['mt-subtitle','m-mt-subtitle'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = sub;
+  });
+}
+
+// ── McCabe-Thiele DIAGRAM RENDERER ────────────────────────────────────────
+function renderMcCabeThiele(svgId, res) {
+  const svgEl = document.getElementById(svgId);
+  if (!svgEl) return;
+
+  // Margins & plot area
+  const ML=52, MR=18, MT=18, MB=48;
+  const VW=380, VH=360;
+  const PW=VW-ML-MR, PH=VH-MT-MB;
+
+  // Coordinate transforms: data [0,1] → SVG pixels
+  const px = x => ML + x * PW;
+  const py = y => MT + (1 - y) * PH;
+
+  // If calc error, show error text
+  if (res.err) {
+    svgEl.innerHTML = `
+      <rect width="380" height="360" fill="#0A1628" rx="6"/>
+      <text x="190" y="185" font-family="'DM Mono',monospace" font-size="11"
+            fill="#E05050" text-anchor="middle" dominant-baseline="middle">${res.err}</text>`;
+    return;
+  }
+
+  const { stageComps, feedStage, rectSlope, rectInt, stripSlope, stripInt,
+          qVal, xFeed, yFeed, xB_raw:xB, xF_raw:xF, xD_raw:xD, alpha, N, Nmin } = res;
+
+  if (!stageComps || stageComps.length === 0) {
+    svgEl.innerHTML = `
+      <rect width="380" height="360" fill="#0A1628" rx="6"/>
+      <text x="190" y="185" font-family="'DM Mono',monospace" font-size="11"
+            fill="#E05050" text-anchor="middle">No stages computed</text>`;
+    return;
+  }
+
+  let svg = '';
+
+  // 1. Background
+  svg += `<rect width="380" height="360" fill="#0A1628" rx="6"/>`;
+
+  // 2. Grid lines (10×10 at every 0.1)
+  for (let i = 1; i < 10; i++) {
+    const gx = px(i * 0.1), gy = py(i * 0.1);
+    svg += `<line x1="${gx.toFixed(1)}" y1="${MT}" x2="${gx.toFixed(1)}" y2="${MT+PH}" stroke="rgba(232,237,245,0.07)" stroke-width="0.6"/>`;
+    svg += `<line x1="${ML}" y1="${gy.toFixed(1)}" x2="${ML+PW}" y2="${gy.toFixed(1)}" stroke="rgba(232,237,245,0.07)" stroke-width="0.6"/>`;
+  }
+
+  // 3. Axis frame
+  svg += `<rect x="${ML}" y="${MT}" width="${PW}" height="${PH}" fill="none" stroke="rgba(232,237,245,0.18)" stroke-width="0.8"/>`;
+
+  // Tick labels
+  for (let i = 0; i <= 5; i++) {
+    const v = (i * 0.2).toFixed(1);
+    const gx = px(i * 0.2), gy = py(i * 0.2);
+    svg += `<text x="${gx.toFixed(1)}" y="${(MT+PH+11).toFixed(1)}" font-family="'DM Mono',monospace" font-size="8"
+              fill="rgba(232,237,245,0.45)" text-anchor="middle">${v}</text>`;
+    svg += `<text x="${(ML-6).toFixed(1)}" y="${gy.toFixed(1)}" font-family="'DM Mono',monospace" font-size="8"
+              fill="rgba(232,237,245,0.45)" text-anchor="end" dominant-baseline="middle">${v}</text>`;
+  }
+
+  // 4. Axis labels
+  svg += `<text x="${(ML+PW/2).toFixed(1)}" y="${(VH-4).toFixed(1)}" font-family="'DM Mono',monospace" font-size="8.5"
+            fill="rgba(232,237,245,0.45)" text-anchor="middle">x (liquid mole fraction)</text>`;
+  svg += `<text x="10" y="${(MT+PH/2).toFixed(1)}" font-family="'DM Mono',monospace" font-size="8.5"
+            fill="rgba(232,237,245,0.45)" text-anchor="middle"
+            transform="rotate(-90,10,${(MT+PH/2).toFixed(1)})">y (vapour mole fraction)</text>`;
+
+  // 5. Equilibrium curve y* = αx/(1+(α-1)x)
+  const eqPts = [];
+  for (let i = 0; i <= 100; i++) {
+    const xi = i / 100;
+    const yi = alpha * xi / (1 + (alpha - 1) * xi);
+    eqPts.push(`${px(xi).toFixed(1)},${py(yi).toFixed(1)}`);
+  }
+  svg += `<polyline points="${eqPts.join(' ')}" fill="none" stroke="#A47FD8" stroke-width="2"/>`;
+
+  // 6. y = x diagonal (dashed)
+  svg += `<line x1="${px(0)}" y1="${py(0)}" x2="${px(1)}" y2="${py(1)}"
+            stroke="rgba(232,237,245,0.18)" stroke-width="1" stroke-dasharray="4 3"/>`;
+
+  // 7. Rectifying operating line: from (xD,xD) to (0, xD/(R+1))
+  svg += `<line x1="${px(xD).toFixed(1)}" y1="${py(xD).toFixed(1)}"
+                x2="${px(0).toFixed(1)}" y2="${py(rectInt).toFixed(1)}"
+                stroke="#4FA3E0" stroke-width="1.8"/>`;
+
+  // 8. Stripping operating line: from (xB,xB) to (xFeed,yFeed)
+  svg += `<line x1="${px(xB).toFixed(1)}" y1="${py(xB).toFixed(1)}"
+                x2="${px(xFeed).toFixed(1)}" y2="${py(yFeed).toFixed(1)}"
+                stroke="#E08A3C" stroke-width="1.8"/>`;
+
+  // 9. q-line
+  if (Math.abs(qVal - 1) < 1e-4) {
+    // Vertical q-line at xF
+    const yEqAtXF = alpha * xF / (1 + (alpha - 1) * xF);
+    svg += `<line x1="${px(xF).toFixed(1)}" y1="${py(0).toFixed(1)}"
+                  x2="${px(xF).toFixed(1)}" y2="${py(yEqAtXF).toFixed(1)}"
+                  stroke="#4EC994" stroke-width="1.2" stroke-dasharray="5 3"/>`;
+  } else {
+    // q-line from (xF,xF) to intersection
+    const qSlope = qVal / (qVal - 1);
+    const qInt   = -xF / (qVal - 1);
+    const xQ0 = 0, yQ0 = qSlope * xQ0 + qInt;
+    const xQ1 = 1, yQ1 = qSlope * xQ1 + qInt;
+    // Clip to [0,1]
+    const x0c = Math.max(0, Math.min(1, xQ0)), y0c = qSlope * x0c + qInt;
+    const x1c = Math.max(0, Math.min(1, xFeed + 0.05));
+    const y1c = qSlope * x1c + qInt;
+    svg += `<line x1="${px(xF).toFixed(1)}" y1="${py(xF).toFixed(1)}"
+                  x2="${px(Math.min(x1c, 1)).toFixed(1)}" y2="${py(Math.max(0, Math.min(1, y1c))).toFixed(1)}"
+                  stroke="#4EC994" stroke-width="1.2" stroke-dasharray="5 3"/>`;
+  }
+
+  // 10. Staircase steps
+  const showAll = N <= 30;
+  let stairPath = `M ${px(xD).toFixed(1)} ${py(xD).toFixed(1)}`;
+  let stageLabels = '';
+
+  for (let i = 0; i < stageComps.length; i++) {
+    const sc = stageComps[i];
+    // Horizontal step: move from current y (sc.yTop) across to xEq
+    stairPath += ` L ${px(sc.xEq).toFixed(1)} ${py(sc.yTop).toFixed(1)}`;
+    // Vertical step: drop to operating line
+    const xMid = px(sc.xEq), yTop = py(sc.yTop), yBot = py(sc.yOp);
+    stairPath += ` L ${px(sc.xEq).toFixed(1)} ${py(sc.yOp).toFixed(1)}`;
+
+    // Stage number label on vertical segment
+    const isFeed = (sc.stage === feedStage);
+    if (showAll || sc.stage % 5 === 0) {
+      const labelX = px(sc.xEq) + 3;
+      const labelY = (py(sc.yTop) + py(sc.yOp)) / 2;
+      svg += `<text x="${labelX.toFixed(1)}" y="${labelY.toFixed(1)}"
+                font-family="'DM Mono',monospace" font-size="${isFeed ? 8 : 7}"
+                fill="${isFeed ? '#4EC994' : 'rgba(232,237,245,0.40)'}"
+                dominant-baseline="middle">${sc.stage}</text>`;
+    }
+  }
+
+  // Draw staircase (regular steps)
+  svg += `<path d="${stairPath}" fill="none" stroke="rgba(232,237,245,0.55)" stroke-width="1.2"/>`;
+
+  // Highlight the feed stage step with brighter stroke
+  if (feedStage >= 1 && feedStage <= stageComps.length) {
+    const fs = stageComps[feedStage - 1];
+    const prevY = feedStage > 1 ? stageComps[feedStage - 2].yOp : xD;
+    svg += `<polyline points="${px(fs.xEq).toFixed(1)},${py(prevY).toFixed(1)}
+              ${px(fs.xEq).toFixed(1)},${py(fs.yTop).toFixed(1)}
+              ${px(fs.xEq).toFixed(1)},${py(fs.yOp).toFixed(1)}"
+              fill="none" stroke="#4EC994" stroke-width="1.8" opacity="0.6"/>`;
+  }
+
+  // 12. Composition markers: dashed verticals at xB (orange), xF (green), xD (blue)
+  const markers = [
+    { x: xB, color: '#E08A3C', label: 'xB' },
+    { x: xF, color: '#4EC994', label: 'xF' },
+    { x: xD, color: '#4FA3E0', label: 'xD' },
+  ];
+  markers.forEach(mk => {
+    svg += `<line x1="${px(mk.x).toFixed(1)}" y1="${MT}"
+                  x2="${px(mk.x).toFixed(1)}" y2="${(MT+PH).toFixed(1)}"
+                  stroke="${mk.color}" stroke-width="0.8" stroke-dasharray="3 3" opacity="0.5"/>`;
+    svg += `<text x="${px(mk.x).toFixed(1)}" y="${(MT+PH+22).toFixed(1)}"
+              font-family="'DM Mono',monospace" font-size="7.5"
+              fill="${mk.color}" text-anchor="middle" opacity="0.8">${mk.label}</text>`;
+  });
+
+  // 13. Annotations top-right
+  const annX = ML + PW - 4;
+  const annY1 = MT + 10, annY2 = MT + 20;
+  svg += `<text x="${annX}" y="${annY1}" font-family="'DM Mono',monospace" font-size="8"
+            fill="rgba(232,237,245,0.70)" text-anchor="end">N = ${N}  ·  Nmin = ${parseFloat(res.Nmin).toFixed(1)}</text>`;
+  svg += `<text x="${annX}" y="${annY2}" font-family="'DM Mono',monospace" font-size="8"
+            fill="rgba(232,237,245,0.50)" text-anchor="end">Feed: stage ${feedStage}</text>`;
+
+  // 14. Legend top-left
+  const legItems = [
+    { color: '#A47FD8', label: 'Equil. curve', dash: '' },
+    { color: '#4FA3E0', label: 'Rect. OL',     dash: '' },
+    { color: '#E08A3C', label: 'Strip. OL',    dash: '' },
+    { color: '#4EC994', label: 'q-line',        dash: '4 2' },
+    { color: 'rgba(232,237,245,0.55)', label: 'Stages', dash: '' },
+  ];
+  legItems.forEach((leg, i) => {
+    const lx = ML + 4, ly = MT + 8 + i * 11;
+    svg += `<line x1="${lx}" y1="${ly}" x2="${lx+12}" y2="${ly}"
+              stroke="${leg.color}" stroke-width="1.6"
+              ${leg.dash ? `stroke-dasharray="${leg.dash}"` : ''}/>`;
+    svg += `<text x="${lx+15}" y="${ly+1}" font-family="'DM Mono',monospace" font-size="7.5"
+              fill="rgba(232,237,245,0.55)" dominant-baseline="middle">${leg.label}</text>`;
+  });
+
+  svgEl.innerHTML = svg;
 }
 
 function updateErrorBadge() {
   const res = calc();
-  document.getElementById('error-area').innerHTML = res.err
-    ? `<span class="err-badge">⚠ ${res.err}</span>` : '';
+  res.err ? showToast(res.err) : clearToast();
 }
 
 // ── RESULTS STRIP ─────────────────────────────────────────────────────────
@@ -1124,7 +1835,7 @@ function animateResults(initial=false) {
     {l:'Cond. Duty', v:parseFloat(res.Qc),   u:'kW',    sub:'Heat removal',                clr:'#4FA3E0'},
     {l:'Reb. Duty',  v:parseFloat(res.Qr),   u:'kW',    sub:'Heat input',                  clr:'#E08A3C'}
   ];
-  bar.innerHTML = items.map(it=>`
+  const itemHtml = items.map(it=>`
     <div class="result-item">
       <div class="result-lbl">${it.l}</div>
       <div class="result-val" data-target="${it.v}"
@@ -1132,6 +1843,14 @@ function animateResults(initial=false) {
            style="color:${it.clr}">—</div>
       <div class="result-sub">${it.u||it.sub}</div>
     </div>`).join('');
+  bar.innerHTML = itemHtml;
+
+  // Mobile results — show in 2×4 grid using same data
+  const mobResults = document.getElementById('m-results');
+  if (mobResults) {
+    mobResults.innerHTML = `<div class="m-results-strip">${itemHtml}</div>`;
+  }
+
   bar.querySelectorAll('.result-val').forEach((el,i)=>{
     const it=items[i];
     const target=parseFloat(el.dataset.target), dp=parseInt(el.dataset.dp), c={v:0};
@@ -1146,11 +1865,23 @@ function animateResults(initial=false) {
 
 // ── LEFT PANEL BUILDERS ───────────────────────────────────────────────────
 function buildMasthead() {
-  document.getElementById('lp-masthead').innerHTML = `
+  const fullHtml = `
     <div class="lp-masthead">
       <div class="lp-title">Distillation Column</div>
-      <div class="lp-tagline">Binary separation by vapour–liquid equilibrium · v3 (mass balance fix)</div>
+      <div class="lp-tagline">Binary separation by vapour–liquid equilibrium · v4 (McCabe-Thiele diagram)</div>
       <select class="lp-mix-select" id="mixture-select" onchange="changeMixture(this.value)">
+        ${Object.entries(MIXES).map(([k,m])=>
+          `<option value="${k}" ${k===state.mix?'selected':''}>${m.name}  (α = ${m.alpha})</option>`
+        ).join('')}
+      </select>
+    </div>`;
+  document.getElementById('lp-masthead').innerHTML = fullHtml;
+
+  // Mobile: compact masthead with just mixture select
+  const mob = document.getElementById('m-masthead');
+  if (mob) mob.innerHTML = `
+    <div class="m-masthead-wrap">
+      <select class="lp-mix-select" id="mixture-select-m" onchange="changeMixture(this.value)">
         ${Object.entries(MIXES).map(([k,m])=>
           `<option value="${k}" ${k===state.mix?'selected':''}>${m.name}  (α = ${m.alpha})</option>`
         ).join('')}
@@ -1159,7 +1890,7 @@ function buildMasthead() {
 }
 
 function buildIntro() {
-  document.getElementById('lp-intro').innerHTML = `
+  const html = `
     <div class="lp-section">
       <div class="lp-section-title">What is distillation?</div>
       <p class="lp-body">
@@ -1188,6 +1919,7 @@ function buildIntro() {
         </defs>
       </svg>
     </div>`;
+  renderTo('lp-intro', 'm-intro', html);
 }
 
 const ANATOMY = [
@@ -1208,7 +1940,7 @@ const ANATOMY = [
 ];
 
 function buildAnatomy() {
-  document.getElementById('lp-anatomy').innerHTML = `
+  const html = `
     <div class="lp-section">
       <div class="lp-section-title">Column anatomy</div>
       <div class="anatomy-list">
@@ -1223,6 +1955,7 @@ function buildAnatomy() {
           </div>`).join('')}
       </div>
     </div>`;
+  renderTo('lp-anatomy', 'm-anatomy', html);
 }
 
 function scrollToAnatomy(compKey) {
@@ -1254,7 +1987,7 @@ function buildEquations() {
     {label:'Minimum reflux (Underwood, q=1)',
      latex:'R_{min} = \\frac{1}{\\alpha-1}\\left(\\frac{x_D}{x_F} - \\alpha\\frac{1-x_D}{1-x_F}\\right)'},
   ];
-  document.getElementById('lp-equations').innerHTML = `
+  const eqHtml = `
     <div class="lp-section">
       <div class="lp-section-title">Key equations</div>
       ${eqs.map(eq=>`
@@ -1266,14 +1999,29 @@ function buildEquations() {
           <div class="eq-box">${rl(eq.latex)}</div>
         </div>`).join('')}
     </div>`;
+  renderTo('lp-equations', 'm-equations', eqHtml);
 }
 
 // ── LIVE ANALYSIS CARD ────────────────────────────────────────────────────
 function buildAnalysisCard() {
-  document.getElementById('lp-analysis').innerHTML = `
+  const html = `
     <div class="lp-section">
       <div class="lp-section-title">Live analysis</div>
       <div id="analysis-card"></div>
+    </div>`;
+  document.getElementById('lp-analysis').innerHTML = html;
+  // Mobile: full analysis goes to Results tab; condensed card goes to Controls tab
+  const mobCtrl = document.getElementById('m-analysis');
+  if (mobCtrl) mobCtrl.innerHTML = `
+    <div class="m-section">
+      <div class="lp-section-title">Live analysis</div>
+      <div id="analysis-card-m"></div>
+    </div>`;
+  const mobResults = document.getElementById('m-analysis-full');
+  if (mobResults) mobResults.innerHTML = `
+    <div class="m-section">
+      <div class="lp-section-title">Live analysis</div>
+      <div id="analysis-card-full"></div>
     </div>`;
 }
 
@@ -1283,7 +2031,12 @@ function updateLiveAnalysis() {
   const res = calc();
 
   if (res.err) {
-    card.innerHTML = `<div class="analysis-err">⚠ ${res.err}</div>`;
+    const errHtml = `<div class="analysis-err">⚠ ${res.err}</div>`;
+    card.innerHTML = errHtml;
+    const cardM = document.getElementById('analysis-card-m');
+    const cardFull = document.getElementById('analysis-card-full');
+    if (cardM) cardM.innerHTML = errHtml;
+    if (cardFull) cardFull.innerHTML = errHtml;
     return;
   }
 
@@ -1333,7 +2086,7 @@ function updateLiveAnalysis() {
     ? `Saturated feed (q ≈ 1): baseline operation. R<sub>eff</sub> ≈ R<sub>set</sub>; negligible superheat.`
     : `Hot feed (q = ${res.q}): two mechanisms raise Qc. ① Column temperature profile shifts up — overhead vapour arrives <span class="analysis-val">superheated (+${overheadSuperheat}°C)</span>, adding ${superHeatKW} kW of sensible duty. ② Drum level control implicitly raises reflux: R<sub>eff</sub> = <span class="analysis-val">${res.Reff}</span> (+${implicitDR} above set-point), increasing V and base condensation load.`;
 
-  card.innerHTML = `
+  const cardHtml = `
     <div class="analysis-card">
       <div class="analysis-row">
         <span class="analysis-label">Difficulty</span>
@@ -1360,49 +2113,173 @@ function updateLiveAnalysis() {
         <span>${energyText}</span>
       </div>
     </div>`;
+  card.innerHTML = cardHtml;
+  const cardM  = document.getElementById('analysis-card-m');
+  const cardFull = document.getElementById('analysis-card-full');
+  if (cardM) cardM.innerHTML = cardHtml;
+  if (cardFull) cardFull.innerHTML = cardHtml;
+}
+
+// ── AT-A-GLANCE CARD ──────────────────────────────────────────────────────
+function buildGlanceCard() {
+  const html = `
+    <div class="glance-card" id="glance-card">
+      <div class="glance-row">
+        <span class="glance-item">
+          <span class="glance-lbl">Stages</span>
+          <span class="glance-val gc-stages">—</span>
+        </span>
+        <span class="glance-item">
+          <span class="glance-lbl">Qc</span>
+          <span class="glance-val gc-qc">— kW</span>
+        </span>
+        <span class="glance-item">
+          <span class="glance-lbl">Distillate</span>
+          <span class="glance-val gc-d">— kg/h</span>
+        </span>
+      </div>
+      <div class="glance-status gc-status">●</div>
+    </div>`;
+  const lpG = document.getElementById('lp-glance');
+  if (lpG) lpG.innerHTML = html;
+  const mG = document.getElementById('m-glance');
+  if (mG) mG.innerHTML = html;
+  updateGlanceCard();
+}
+
+function updateGlanceCard() {
+  const res = calc();
+  const R = state.params.refluxRatio;
+  const Rmin = res.err ? null : parseFloat(res.Rmin);
+  const ratio = Rmin ? R / Rmin : null;
+
+  const stages = res.err ? '—' : String(res.N);
+  const qc     = res.err ? '— kW' : res.Qc + ' kW';
+  const d      = res.err ? '— kg/h' : res.D + ' kg/h';
+
+  let statusColor, statusText;
+  if (res.err) {
+    statusColor = '#E07070'; statusText = '● ERROR — ' + res.err;
+  } else if (ratio >= 1.2 && ratio <= 1.5) {
+    statusColor = '#4EC994'; statusText = '● HEALTHY — R at ' + ratio.toFixed(2) + '× Rmin';
+  } else if (ratio > 1.05) {
+    statusColor = '#C8A96E'; statusText = '● CAUTION — R at ' + ratio.toFixed(2) + '× Rmin';
+  } else {
+    statusColor = '#E07070'; statusText = '● WARNING — R approaching Rmin';
+  }
+
+  document.querySelectorAll('.gc-stages').forEach(el => el.textContent = stages);
+  document.querySelectorAll('.gc-qc').forEach(el => el.textContent = qc);
+  document.querySelectorAll('.gc-d').forEach(el => el.textContent = d);
+  document.querySelectorAll('.gc-status').forEach(el => {
+    el.textContent = statusText;
+    el.style.color = statusColor;
+  });
+}
+
+// ── KEY OUTPUTS CARD (mobile Results tab) ────────────────────────────────
+function buildKeyOutputs() {
+  const mob = document.getElementById('m-keyoutputs');
+  if (!mob) return;
+  mob.innerHTML = `<div id="key-outputs-content"></div>`;
+  updateKeyOutputs();
+}
+
+function updateKeyOutputs() {
+  const el = document.getElementById('key-outputs-content');
+  if (!el) return;
+  const res = calc();
+  if (res.err) {
+    el.innerHTML = `<div style="padding:1rem;"><div class="analysis-err">⚠ ${res.err}</div></div>`;
+    return;
+  }
+  el.innerHTML = `
+    <div class="key-outputs-card">
+      <div class="key-outputs-col">
+        <div class="key-outputs-col-title">Mass Balance</div>
+        <div class="key-outputs-row">
+          <span class="key-outputs-lbl">D</span>
+          <span class="key-outputs-val" style="color:#4FA3E0">${res.D} kg/h</span>
+        </div>
+        <div class="key-outputs-row">
+          <span class="key-outputs-lbl">B</span>
+          <span class="key-outputs-val" style="color:#E08A3C">${res.B} kg/h</span>
+        </div>
+        <div class="key-outputs-row">
+          <span class="key-outputs-lbl">N stages</span>
+          <span class="key-outputs-val">${res.N}</span>
+        </div>
+        <div class="key-outputs-row">
+          <span class="key-outputs-lbl">Trays</span>
+          <span class="key-outputs-val">${res.Na}</span>
+        </div>
+      </div>
+      <div class="key-outputs-col">
+        <div class="key-outputs-col-title">Energy</div>
+        <div class="key-outputs-row">
+          <span class="key-outputs-lbl">Qc</span>
+          <span class="key-outputs-val" style="color:#4FA3E0">${res.Qc} kW</span>
+        </div>
+        <div class="key-outputs-row">
+          <span class="key-outputs-lbl">Qr</span>
+          <span class="key-outputs-val" style="color:#E08A3C">${res.Qr} kW</span>
+        </div>
+        <div class="key-outputs-row">
+          <span class="key-outputs-lbl">R/Rmin</span>
+          <span class="key-outputs-val">${(state.params.refluxRatio/parseFloat(res.Rmin)).toFixed(2)}×</span>
+        </div>
+        <div class="key-outputs-row">
+          <span class="key-outputs-lbl">q-value</span>
+          <span class="key-outputs-val">${res.q}</span>
+        </div>
+      </div>
+    </div>`;
 }
 
 // ── PARAMETER CONTROLS ────────────────────────────────────────────────────
 function buildParamsPanel() {
   const mix = MIXES[state.mix];
   const res = calc();
+  const openDefault = isDesktop();
 
-  const colSliders = [
-    {k:'refluxRatio',     l:'Reflux Ratio (R)', p:'refluxRatio',
-     min:1, max:10, step:0.1, d:state.params.refluxRatio, v:state.params.refluxRatio},
-    {k:'feedComposition', l:'Feed Comp (xF)',   p:'feedComposition',
-     min:0.1, max:0.9, step:0.05, d:state.params.feedComposition, v:state.params.feedComposition},
-    {k:'distillatePurity',l:'Distillate (xD)',  p:'distillateComposition',
+  // Param definitions: k=info key, l=label, p=state key, cat=category, sn=sensitivity class
+  const coreSliders = [
+    {k:'distillatePurity',l:'Distillate (xD)',  p:'distillateComposition', cat:'mb', sn:'crit',
      min:0.9, max:0.999, step:0.005,
      d:(state.params.distillateComposition*100).toFixed(1)+'%', v:state.params.distillateComposition},
-    {k:'bottomsPurity',   l:'Bottoms (xB)',     p:'bottomsComposition',
+    {k:'bottomsPurity',   l:'Bottoms (xB)',     p:'bottomsComposition',    cat:'mb', sn:'crit',
      min:0.001, max:0.10, step:0.005,
      d:(state.params.bottomsComposition*100).toFixed(1)+'%', v:state.params.bottomsComposition},
+    {k:'refluxRatio',     l:'Reflux Ratio (R)', p:'refluxRatio',           cat:'both', sn:'crit',
+     min:1, max:10, step:0.1, d:state.params.refluxRatio, v:state.params.refluxRatio},
+    {k:'feedComposition', l:'Feed Comp (xF)',   p:'feedComposition',       cat:'mb', sn:'high',
+     min:0.1, max:0.9, step:0.05, d:state.params.feedComposition, v:state.params.feedComposition},
   ];
   const feedSliders = [
-    {k:'feedFlow', l:'Feed Flow Rate',  p:'feedFlow',
+    {k:'feedFlow', l:'Feed Flow Rate',  p:'feedFlow',    cat:'mb', sn:'med',
      min:500, max:5000, step:100, d:state.params.feedFlow+' kg/h', v:state.params.feedFlow},
-    {k:'feedTemp', l:'Feed Temperature',p:'feedTemp',
+    {k:'feedTemp', l:'Feed Temperature',p:'feedTemp',    cat:'en', sn:'high',
      min:mix.bpL-40, max:mix.bpH+40, step:1,
      d:state.params.feedTemp+'°C', v:state.params.feedTemp},
-    {k:'feedPressure',l:'Pressure (atm)',p:'feedPressure',
+    {k:'feedPressure',l:'Pressure (atm)',p:'feedPressure', cat:'both', sn:'med',
      min:0.05, max:10, step:0.05, d:state.params.feedPressure+' atm', v:state.params.feedPressure},
   ];
   const utilSliders = [
-    {k:'cwTempIn',    l:'CW Inlet',       p:'cwTempIn',
+    {k:'cwTempIn',    l:'CW Inlet',       p:'cwTempIn',     cat:'en', sn:'',
      min:15, max:35, step:1, d:state.params.cwTempIn+'°C', v:state.params.cwTempIn},
-    {k:'cwTempOut',   l:'CW Outlet',      p:'cwTempOut',
+    {k:'cwTempOut',   l:'CW Outlet',      p:'cwTempOut',    cat:'en', sn:'',
      min:30, max:55, step:1, d:state.params.cwTempOut+'°C', v:state.params.cwTempOut},
-    {k:'steamTemp',   l:'Steam Temp',     p:'steamTemp',
+    {k:'steamTemp',   l:'Steam Temp',     p:'steamTemp',    cat:'en', sn:'',
      min:120, max:300, step:5, d:state.params.steamTemp+'°C', v:state.params.steamTemp},
-    {k:'steamPressure',l:'Steam Pressure',p:'steamPressure',
+    {k:'steamPressure',l:'Steam Pressure',p:'steamPressure', cat:'en', sn:'',
      min:1, max:20, step:0.5, d:state.params.steamPressure+' bar', v:state.params.steamPressure},
   ];
 
+  const snDots = {crit:'●●●', high:'●●○', med:'●○○'};
   const row = s => `
-    <div class="param-row">
+    <div class="param-row" data-param="${s.p}" data-cat="${s.cat}">
       <div class="param-top">
-        <span class="param-label">${s.l}
+        <span class="param-label">${s.l}${s.sn ? `<span class="snbadge ${s.sn}" aria-label="${s.sn} sensitivity">${snDots[s.sn]}</span>` : ''}
           <button class="info-btn" onclick="showParamInfo('${s.k}')">i</button>
         </span>
         <span class="param-val" id="pval-${s.k}">${s.d}</span>
@@ -1411,17 +2288,26 @@ function buildParamsPanel() {
              oninput="updateParam('${s.p}',this.value)">
     </div>`;
 
-  document.getElementById('lp-params').innerHTML = `
+  const html = `
     <div class="lp-section">
       <div class="lp-section-title">Parameters</div>
-      ${res.err ? `<div class="analysis-err" style="margin-bottom:0.75rem">⚠ ${res.err}</div>` : ''}
-      <div class="param-group-title">Column</div>
-      ${colSliders.map(row).join('')}
-      <div class="param-group-title">Feed</div>
-      ${feedSliders.map(row).join('')}
-      <div class="param-group-title">Utilities</div>
-      ${utilSliders.map(row).join('')}
+      <div class="param-group-title">Core · Separation</div>
+      ${coreSliders.map(row).join('')}
+      <details class="tier-details" id="tier-feed" ${openDefault ? 'open' : ''}>
+        <summary class="tier-summary">Feed Conditions</summary>
+        <div class="tier-body">
+          ${feedSliders.map(row).join('')}
+        </div>
+      </details>
+      <details class="tier-details" id="tier-util" ${openDefault ? 'open' : ''}>
+        <summary class="tier-summary">Utilities</summary>
+        <div class="tier-body">
+          ${utilSliders.map(row).join('')}
+        </div>
+      </details>
     </div>`;
+
+  renderTo('lp-params', 'm-params', html);
 }
 
 // ── COMPONENT ACCORDIONS ──────────────────────────────────────────────────
@@ -1453,13 +2339,14 @@ function buildAccordions() {
       </div>
     </div>`).join('');
 
-  document.getElementById('lp-accordions').innerHTML = `
+  const accHtml = `
     <div style="border-top:1px solid var(--lp-border)">
       <div style="padding:0.75rem 1.5rem 0.35rem">
         <div class="lp-section-title">Component reference</div>
       </div>
       ${items}
     </div>`;
+  renderTo('lp-accordions', 'm-accordions', accHtml);
 }
 
 function toggleAccordion(key) {
@@ -1502,15 +2389,13 @@ function updateAccordionLive(key) {
 // ── EVENT HANDLERS ────────────────────────────────────────────────────────
 function toggleFlow() {
   state.showFlow = !state.showFlow;
-  const btn = document.getElementById('btn-flow');
-  animate(btn, {scale:[0.88,1], duration:600, ease:spring({stiffness:280,damping:12})});
+  const btns = [document.getElementById('btn-flow'), document.getElementById('btn-flow-m')];
+  btns.forEach(btn => { if (btn) animate(btn, {scale:[0.88,1], duration:600, ease:spring({stiffness:280,damping:12})}); });
   if (state.showFlow) {
-    btn.textContent = 'Stop Flow';
-    btn.classList.add('active');
+    btns.forEach(btn => { if (btn) { btn.textContent = 'Stop Flow'; btn.classList.add('active'); } });
     startFlow();
   } else {
-    btn.textContent = 'Start Flow';
-    btn.classList.remove('active');
+    btns.forEach(btn => { if (btn) { btn.textContent = 'Start Flow'; btn.classList.remove('active'); } });
     stopFlow();
   }
 }
@@ -1527,6 +2412,11 @@ function changeMixture(val) {
   state.params.feedTemp = m.T;
   state.params.feedPressure = m.P;
   state.params.feedComposition = m.feedComp;
+  // Sync both mixture selects
+  ['mixture-select', 'mixture-select-m'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = val;
+  });
   buildParamsPanel();
   updateAll();
 }
@@ -1542,11 +2432,19 @@ function updateAll() {
   animateResults(false);
   updateLiveAnalysis();
   updateErrorBadge();
+  updateGlanceCard();
+  updateKeyOutputs();
+  // Near-Rmin warning on R slider (both desktop and mobile)
+  const res = calc();
+  document.querySelectorAll('[data-param="refluxRatio"]').forEach(rRow => {
+    if (!res.err) rRow.classList.toggle('slider-warn', parseFloat(res.Rmin) * 1.2 > state.params.refluxRatio);
+  });
   const openBody = document.querySelector('.accordion-body.open');
   if (openBody) {
     const key = openBody.id.replace('acc-', '');
     updateAccordionLive(key);
   }
+  updateMT();  // no-op when panel is closed
 }
 
 function showParamInfo(p) {
@@ -1668,15 +2566,27 @@ buildAnatomy();
 buildEquations();
 buildAnalysisCard();
 buildParamsPanel();
+buildGlanceCard();
 buildAccordions();
 buildTopBar();
+buildKeyOutputs();
 
-document.getElementById('svg-container').innerHTML = buildSVG();
+const svgHtml = buildSVG();
+document.getElementById('svg-container').innerHTML = svgHtml;
+// Render SVG to mobile panel too
+const mSvg = document.getElementById('m-svg');
+if (mSvg) mSvg.innerHTML = svgHtml;
+
+// Build M-T panel (must come after SVG is injected into #svg-container)
+buildMTPanel();
+window.toggleMT = toggleMT;
 
 updateSVGLabels();
 animateResults(false);
 updateLiveAnalysis();
 updateErrorBadge();
+updateGlanceCard();
+updateKeyOutputs();
 
 runBoot();
 </script>
