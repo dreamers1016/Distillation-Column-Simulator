@@ -1,0 +1,22 @@
+/* Design tokens: warm "lab paper" look. System font stack only (no web-font downloads). */
+:root {
+  --paper: #f4ecdc;
+  --grid: #e5dccb;
+  --ink: #1f2a36;
+  --teal: #14a3a0;
+  --card: #fffdf8;
+  --line: #d8ccb4;
+  --muted: #6b7580;
+  --warn-bg: #fff1d6;
+  --warn-line: #e0a43a;
+  --warn-ink: #7a4b00;
+  --err-bg: #fde3e1;
+  --err-line: #d9534f;
+  --err-ink: #8a1f1a;
+  --control-line: #c9bda6;
+
+  --font: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --radius: 10px;
+  --panel-w: clamp(340px, 24vw, 460px);
+  --topbar-h: 60px;
+}
