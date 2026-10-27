@@ -13,3 +13,15 @@ export type ComponentId =
   | 'nButane'
   | 'nHexane'
   | 'nHeptane';
+
+export type WarningCode =
+  | 'ANTOINE_RANGE'
+  | 'CMO_GAP'
+  | 'UTILITY'
+  | 'IDEAL_VAPOUR'
+  | 'DISPLAY_CAP';
+
+export interface Warning {
+  code: WarningCode;
+  message: string;
+}
