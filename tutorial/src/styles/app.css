@@ -395,3 +395,34 @@ input:focus-visible {
     border-radius: var(--radius) var(--radius) 0 0;
   }
 }
+
+/* ---- pipe colour legend (bottom-left of the stage) -------------------- */
+.pipe-legend {
+  position: fixed;
+  left: 14px;
+  bottom: 14px;
+  z-index: 4;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  max-width: 520px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--ink);
+  background: rgba(255, 253, 248, 0.85);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  pointer-events: none;
+}
+.pipe-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+.pipe-legend i {
+  display: inline-block;
+  width: 16px;
+  height: 5px;
+  border-radius: 2px;
+}
