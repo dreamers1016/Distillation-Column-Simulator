@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { MIXTURES } from '../../src/engine/mixtures';
-import { bubblePoint, dewPoint, findAzeotrope } from '../../src/engine/vle';
+import { bubblePoint, dewPoint, findAzeotrope, VleModelError } from '../../src/engine/vle';
 import { gammas } from '../../src/engine/activity';
 
 const P = 1.01325;
@@ -22,7 +22,6 @@ describe('VLE', () => {
   });
   it('methanol-water x=0.5 → T 73.16 ± 0.05 °C, y 0.789 ± 0.002', () => {
     const r = bubblePoint(MIXTURES['methanol-water'], 0.5, P);
-    expect(r.T_K - 273.15).toBeCloseTo(73.16, 1);
     expect(Math.abs(r.T_K - 273.15 - 73.16)).toBeLessThan(0.05);
     expect(Math.abs(r.y1 - 0.789)).toBeLessThan(0.002);
   });
@@ -54,11 +53,75 @@ describe('VLE', () => {
       }
     }
   });
-  it('propane-butane at 1.01325 bar emits ANTOINE_RANGE warning naming propane', () => {
+  it('dewPoint round-trips bubblePoint at 1.01325 and 5 bar (methanol-water, ethanol-water, four ideal presets at 5 bar)', () => {
+    const cases: [keyof typeof MIXTURES, number][] = [
+      ['methanol-water', 1.01325], ['methanol-water', 5], ['ethanol-water', 1.01325], ['ethanol-water', 5],
+      ['benzene-toluene', 5], ['hexane-heptane', 5], ['methanol-ethanol', 5], ['propane-butane', 5],
+    ];
+    for (const [id, p] of cases) {
+      for (let i = 1; i < 40; i++) {
+        const x = i / 40;
+        const b = bubblePoint(MIXTURES[id], x, p);
+        const d = dewPoint(MIXTURES[id], b.y1, p);
+        expect(Math.abs(d.x1 - x), `${id} ${p} bar x=${x}`).toBeLessThan(1e-6);
+        expect(Math.abs(d.T_K - b.T_K)).toBeLessThan(1e-4);
+      }
+    }
+  });
+  it('dewPoint never returns a non-equilibrium state: every returned (x, y) satisfies bubble(x).y1 = y', () => {
+    for (const id of ['ethanol-water', 'acetone-water', 'isopropanol-water'] as const) {
+      for (const p of [1.01325, 5, 10]) {
+        for (let i = 1; i < 200; i++) {
+          const y = i / 200;
+          try {
+            const d = dewPoint(MIXTURES[id], y, p);
+            const b = bubblePoint(MIXTURES[id], d.x1, p);
+            expect(Math.abs(b.y1 - y), `${id} ${p} bar y=${y}`).toBeLessThanOrEqual(1e-6);
+            expect(Math.abs(b.T_K - d.T_K)).toBeLessThan(1e-4);
+          } catch (e) {
+            expect(e).toBeInstanceOf(VleModelError);
+          }
+        }
+      }
+    }
+  });
+  it('isopropanol-water at 5 bar on its non-monotone y*(x) region throws VleModelError', () => {
+    // y*(0.14) = 0.5258 > y*(0.265) = 0.5196: a model-predicted phase split.
+    const ipa = MIXTURES['isopropanol-water'];
+    expect(() => dewPoint(ipa, 0.5226, 5)).toThrow(VleModelError);
+    try {
+      dewPoint(ipa, 0.5226, 5);
+    } catch (e) {
+      expect((e as Error).message).toMatch(/Isopropanol/);
+      expect((e as Error).message).toMatch(/5 bar/);
+      expect((e as Error).message).toMatch(/phase split/);
+    }
+  });
+  it('acetone-water at 10 bar, y=0.703 (previously a silent wrong state) is correct or throws', () => {
+    const ac = MIXTURES['acetone-water'];
+    try {
+      const d = dewPoint(ac, 0.703, 10);
+      expect(Math.abs(bubblePoint(ac, d.x1, 10).y1 - 0.703)).toBeLessThanOrEqual(1e-6);
+    } catch (e) {
+      expect(e).toBeInstanceOf(VleModelError);
+    }
+  });
+  it('propane-butane at 1.01325 bar emits ANTOINE_RANGE warning naming propane (about 35 K below Tmin)', () => {
     const r = bubblePoint(MIXTURES['propane-butane'], 0.5, P);
     const w = r.warnings.find((q) => q.code === 'ANTOINE_RANGE');
     expect(w).toBeDefined();
     expect(w!.message).toMatch(/propane/i);
+  });
+  it('propane-butane at 18 bar, x=0.05 (bottom T above propane Tc) emits ANTOINE_RANGE citing the critical temperature', () => {
+    const r = bubblePoint(MIXTURES['propane-butane'], 0.05, 18);
+    expect(r.T_K).toBeGreaterThan(369.8);
+    const w = r.warnings.find((q) => q.code === 'ANTOINE_RANGE' && /propane/i.test(q.message));
+    expect(w).toBeDefined();
+    expect(w!.message).toMatch(/critical temperature \(Tc = 369\.8 K\)/);
+  });
+  it('benzene-toluene default xB=0.05 at 1 atm emits NO ANTOINE_RANGE warning (accurate mild extrapolation)', () => {
+    const r = bubblePoint(MIXTURES['benzene-toluene'], 0.05, P);
+    expect(r.warnings.filter((q) => q.code === 'ANTOINE_RANGE')).toHaveLength(0);
   });
   it('methanol-water at x=0.95, 1 atm emits NO ANTOINE_RANGE warning (mild extrapolation tolerated)', () => {
     const r = bubblePoint(MIXTURES['methanol-water'], 0.95, P);
