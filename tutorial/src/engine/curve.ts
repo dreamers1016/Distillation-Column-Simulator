@@ -7,6 +7,8 @@ import { bubblePoint, VleModelError } from './vle';
 export interface EquilibriumCurve {
   yStar(x: number): number;
   xStar(y: number): number;
+  /** Breakpoints of a piecewise-linear curve, ascending from 0 to 1; absent for analytic curves. */
+  readonly nodes?: readonly number[];
 }
 
 const unit = (v: number): number => (Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0);
@@ -31,10 +33,27 @@ const MONOTONE_TOL = 1e-12;
 
 const cache = new WeakMap<MixturePreset, Map<number, EquilibriumCurve>>();
 
+// Last index i in [0, n-1] with a[i] <= v (binary search on an ascending array).
+function bracket(a: readonly number[], v: number): number {
+  let lo = 0;
+  let hi = a.length - 1;
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if (a[mid] <= v) lo = mid;
+    else hi = mid;
+  }
+  return lo;
+}
+
 /**
- * Real-VLE equilibrium curve at P_bar: y*(x) tabulated on 400 intervals from
- * bubblePoint and linearly interpolated; xStar inverts the table by binary
- * search (the exact inverse of the interpolant, so xStar(yStar(x)) = x).
+ * Real-VLE equilibrium curve at P_bar: y*(x) tabulated from bubblePoint at 401
+ * end-packed nodes x_i = (1 - cos(pi i / 400)) / 2 and linearly interpolated.
+ * Packing the nodes toward x = 0 and 1 matters: y*(x) of the aqueous mixtures
+ * bends sharply at very low x (a uniform grid misses 1e-4 by up to 2.5e-3 in
+ * the first interval); measured at every interval midpoint the error is
+ * <= 1e-4 for all presets. xStar is the exact inverse of the interpolant
+ * (binary search on the table), so xStar(yStar(x)) = x. `nodes` exposes the
+ * breakpoints for exact feasibility checks.
  * Throws VleModelError when the tabulated y*(x) is not increasing, i.e. the
  * activity model predicts a spurious liquid phase split. Past an azeotrope
  * y*(x) < x but still increases, so azeotropic systems are accepted here
@@ -52,34 +71,31 @@ export function vleCurve(mix: MixturePreset, P_bar: number): EquilibriumCurve {
 
   const P = key / P_KEY_STEP;
   const n = TABLE_INTERVALS;
+  const xs = new Array<number>(n + 1);
   const ys = new Array<number>(n + 1);
   for (let i = 0; i <= n; i++) {
-    ys[i] = i === 0 ? 0 : i === n ? 1 : bubblePoint(mix, i / n, P).y1; // pure end points exact
+    xs[i] = i === 0 ? 0 : i === n ? 1 : (1 - Math.cos((Math.PI * i) / n)) / 2;
+    ys[i] = i === 0 ? 0 : i === n ? 1 : bubblePoint(mix, xs[i], P).y1; // pure end points exact
   }
   for (let i = 0; i < n; i++) {
     if (!(ys[i + 1] > ys[i] - MONOTONE_TOL)) {
       throw new VleModelError(
-        `${mix.name} at ${P} bar: the activity model predicts a liquid phase split (non-monotone y*(x)) near x = ${(i / n).toFixed(3)}; no equilibrium curve can be built, outside the model's validity.`,
+        `${mix.name} at ${P} bar: the activity model predicts a liquid phase split (non-monotone y*(x)) near x = ${xs[i].toFixed(3)}; no equilibrium curve can be built, outside the model's validity.`,
       );
     }
   }
   const curve: EquilibriumCurve = {
+    nodes: xs,
     yStar: (x) => {
-      const t = unit(x) * n;
-      const i = Math.min(n - 1, Math.floor(t));
-      return ys[i] + (t - i) * (ys[i + 1] - ys[i]);
+      const u = unit(x);
+      const i = bracket(xs, u);
+      return ys[i] + ((u - xs[i]) / (xs[i + 1] - xs[i])) * (ys[i + 1] - ys[i]);
     },
     xStar: (y) => {
       const v = unit(y);
-      let lo = 0;
-      let hi = n;
-      while (hi - lo > 1) {
-        const mid = (lo + hi) >> 1;
-        if (ys[mid] <= v) lo = mid;
-        else hi = mid;
-      }
-      const dy = ys[lo + 1] - ys[lo];
-      return (lo + (dy > 0 ? (v - ys[lo]) / dy : 0)) / n;
+      const i = bracket(ys, v);
+      const dy = ys[i + 1] - ys[i];
+      return xs[i] + (dy > 0 ? ((v - ys[i]) / dy) * (xs[i + 1] - xs[i]) : 0);
     },
   };
   if (byP.size >= CACHE_MAX_PER_MIXTURE) byP.delete(byP.keys().next().value as number);

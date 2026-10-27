@@ -14,16 +14,24 @@ describe('curves', () => {
   it('constant-alpha xStar inverts yStar', () => {
     for (const x of [0, 0.05, 0.3, 0.77, 1]) expect(c.xStar(c.yStar(x))).toBeCloseTo(x, 12);
   });
-  it('vleCurve matches direct bubblePoint within 1e-4 and xStar inverts yStar', () => {
-    for (const id of ['methanol-water', 'ethanol-water', 'benzene-toluene', 'methanol-ethanol'] as const) {
+  it('vleCurve matches bubblePoint within 1e-4 at the true midpoint of EVERY node interval (incl. x < 0.0025)', () => {
+    for (const id of ['methanol-water', 'ethanol-water', 'acetone-water', 'isopropanol-water', 'benzene-toluene'] as const) {
       const curve = vleCurve(MIXTURES[id], P);
+      const nodes = curve.nodes!;
+      expect(nodes.length).toBeGreaterThan(100);
       let worst = 0;
-      for (let i = 1; i < 200; i++) {
-        const x = (i - 0.5) / 200; // off-grid points
-        worst = Math.max(worst, Math.abs(curve.yStar(x) - bubblePoint(MIXTURES[id], x, P).y1));
+      let worstX = 0;
+      for (let i = 0; i + 1 < nodes.length; i++) {
+        const x = 0.5 * (nodes[i] + nodes[i + 1]);
+        const err = Math.abs(curve.yStar(x) - bubblePoint(MIXTURES[id], x, P).y1);
+        if (err > worst) {
+          worst = err;
+          worstX = x;
+        }
         expect(curve.xStar(curve.yStar(x))).toBeCloseTo(x, 9);
       }
-      expect(worst).toBeLessThan(1e-4);
+      expect(nodes.some((x) => x > 0 && x < 0.0025)).toBe(true); // the low-x region is sampled
+      expect(worst, `${id}: worst error ${worst} at x = ${worstX}`).toBeLessThanOrEqual(1e-4);
     }
   });
   it('vleCurve is cached per mixture and P rounded to 1e-4 bar', () => {
@@ -66,6 +74,21 @@ describe('McCabe-Thiele, constant alpha', () => {
     expect(rminPinch(c, { xF: 0.5, xD: 0.95, xB: 0.05, R: 0, q: 0.5 }).Rmin).toBeCloseTo(1.4987, 3);
     expect(rminPinch(c, { xF: 0.5, xD: 0.95, xB: 0.05, R: 0, q: 1.2 }).Rmin).toBeCloseTo(0.9888, 3);
   });
+  it('Rmin for q outside [0,1]: q=-0.5 -> 2.85767, q=0 -> 2.1, q=1.5 -> 0.85767, q=3 -> 0.49182', () => {
+    for (const [q, want] of [[-0.5, 2.85767], [0, 2.1], [1.5, 0.85767], [3, 0.49182]]) {
+      const got = rminPinch(c, { xF: 0.5, xD: 0.95, xB: 0.05, R: 0, q }).Rmin;
+      expect(Math.abs(got - want), `q=${q}: ${got}`).toBeLessThan(1e-4);
+    }
+  });
+  it('q = 1 +/- 1e-9 still gives Rmin 1.1', () => {
+    for (const q of [1 - 1e-9, 1 + 1e-9]) {
+      expect(Math.abs(rminPinch(c, { xF: 0.5, xD: 0.95, xB: 0.05, R: 0, q }).Rmin - 1.1)).toBeLessThan(1e-3);
+    }
+  });
+  it('Rmin is exactly 0 when R = 0 is already feasible', () => {
+    // very volatile pair, xD barely above xF: the flat R = 0 rectifying line clears y*
+    expect(rminPinch(constantAlphaCurve(50), { xF: 0.5, xD: 0.5001, xB: 0.01, R: 0, q: 1 }).Rmin).toBe(0);
+  });
   it('Fenske a=2.5 xD .95 xB .05 -> 6.4269; nminTotalReflux within 0.5 stage of it', () => {
     expect(Math.abs(fenske(2.5, 0.95, 0.05) - 6.4269)).toBeLessThan(1e-4);
     expect(Math.abs(nminTotalReflux(c, 0.95, 0.05) - fenske(2.5, 0.95, 0.05))).toBeLessThan(0.5);
@@ -104,6 +127,57 @@ describe('McCabe-Thiele, real VLE', () => {
   });
   it('ethanol-water xD .8 xB .02 Nmin = 5.963', () => {
     expect(Math.abs(nminTotalReflux(etoh, 0.8, 0.02) - 5.963)).toBeLessThan(0.02);
+  });
+});
+
+// Brute-force Rmin on the same curve: bisection with a 20,000-point uniform check.
+function bruteRmin(curve: ReturnType<typeof vleCurve>, o: { xF: number; xD: number; xB: number; q: number }): number {
+  const ok = (R: number): boolean => {
+    const op = { ...o, R };
+    const { x: xi, y: yi } = qLineIntersection(op);
+    if (!(xi > o.xB && xi < o.xD) || yi >= curve.yStar(xi)) return false;
+    const rs = R / (R + 1);
+    const ri = o.xD / (R + 1);
+    const ss = (yi - o.xB) / (xi - o.xB);
+    const M = 20000;
+    for (let i = 0; i <= M; i++) {
+      const x = o.xB + ((o.xD - o.xB) * i) / M;
+      const y = x > xi ? rs * x + ri : ss * (x - o.xB) + o.xB;
+      if (y >= curve.yStar(x)) return false;
+    }
+    return true;
+  };
+  let lo = 0;
+  let hi = 100;
+  for (let k = 0; k < 60; k++) {
+    const m = 0.5 * (lo + hi);
+    if (ok(m)) hi = m;
+    else lo = m;
+  }
+  return hi;
+}
+
+describe('rminPinch is breakpoint-aware (tangent pinch on a piecewise curve)', () => {
+  it.each([
+    [{ xF: 0.1, xD: 0.84, xB: 0.01, q: 1 }],
+    [{ xF: 0.05, xD: 0.884, xB: 0.005, q: 1 }],
+  ])('ethanol-water %o: never below, and within 1e-5 relative of, a 20,000-point brute force', (o) => {
+    const got = rminPinch(etoh, { ...o, R: 0 }).Rmin;
+    const bf = bruteRmin(etoh, o);
+    expect(got).toBeGreaterThanOrEqual(bf * (1 - 1e-9));
+    expect(Math.abs(got - bf) / bf).toBeLessThan(1e-5);
+  });
+});
+
+describe('rminPinch on an analytic curve (no nodes) uses golden-section refinement', () => {
+  it('ethanol-water curve with nodes hidden gives the same Rmin to 1e-5 relative', () => {
+    const smooth = { yStar: etoh.yStar, xStar: etoh.xStar };
+    for (const o of [{ xF: 0.1, xD: 0.84, xB: 0.01, q: 1 }, { xF: 0.05, xD: 0.884, xB: 0.005, q: 1 }]) {
+      const a = rminPinch(smooth, { ...o, R: 0 });
+      const b = rminPinch(etoh, { ...o, R: 0 });
+      expect(Math.abs(a.Rmin - b.Rmin) / b.Rmin).toBeLessThan(1e-5);
+      expect(a.pinch).toBe(b.pinch);
+    }
   });
 });
 

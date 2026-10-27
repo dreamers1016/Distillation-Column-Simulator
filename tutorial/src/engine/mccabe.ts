@@ -41,7 +41,10 @@ const Q_ONE_TOL = 1e-12;
 const GAP_MARGIN = 1e-9; // an operating line must clear y* by more than this
 const PINCH_POINTS = 400;
 const R_MAX = 100;
-const R_TOL = 1e-6;
+const R_TOL = 1e-9;
+const GOLDEN = 0.3819660112501051;
+const GOLDEN_ITERS = 60;
+const TIE_TOL = 1e-12; // a tangent point must beat the feed gap by more than rounding
 
 /** Intersection of the q-line and the rectifying operating line. For q = 1, x = xF. */
 export function qLineIntersection(op: ColumnOp): { x: number; y: number } {
@@ -113,48 +116,82 @@ export function stepStages(curve: EquilibriumCurve, op: ColumnOp): StageResult {
   return stepFrom(curve, xD, xB, xi, (x) => (x > xi ? rs * x + ri : ss * (x - xB) + xB), `McCabe-Thiele (R = ${R})`);
 }
 
+type Pinch = 'feed' | 'tangent-rectifying' | 'tangent-stripping';
+
 /**
  * Minimum reflux by pinch search: the smallest R for which both operating
- * lines stay strictly below y* on 399 interior points of [xB, xD] and the
- * q-line intersection is below y*; bisection on R in [0, 100] to 1e-6. The
- * pinch is classified by where the smallest y* - y gap sits at that R.
+ * lines stay strictly below y* on [xB, xD] and the q-line intersection is
+ * below y*; bisection on R in [0, 100] to 1e-9. If R = 0 is already feasible
+ * the answer is exactly 0.
+ *
+ * Feasibility is checked on a 401-point uniform grid plus every breakpoint
+ * (`curve.nodes`) inside [xB, xD]: on a piecewise-linear curve the gap to a
+ * line is piecewise linear, so a tangent touches at a node and a uniform grid
+ * alone would miss it. Each local minimum of the sampled gap is then refined
+ * by golden-section search (needed for analytic curves, harmless otherwise),
+ * so the returned Rmin is on the feasible side to within the 1e-9 gap margin.
+ * The pinch is classified from where the smallest gap y* - y_op sits.
  */
-export function rminPinch(
-  curve: EquilibriumCurve,
-  op: ColumnOp,
-): { Rmin: number; pinch: 'feed' | 'tangent-rectifying' | 'tangent-stripping' } {
+export function rminPinch(curve: EquilibriumCurve, op: ColumnOp): { Rmin: number; pinch: Pinch } {
   const { xF, xD, xB, q } = op;
   if (![xF, xD, xB, q].every(Number.isFinite)) throw new StageLimitError('Rmin: non-finite input.');
 
-  // Smallest gap y* - y_op and where it is, or null if R is infeasible (the
-  // intersection is outside (xB, xD) or an operating line reaches y*).
-  const evaluate = (R: number): { gap: number; pinch: 'feed' | 'tangent-rectifying' | 'tangent-stripping' } | null => {
-    const o = { xF, xD, xB, R, q };
+  const pts: number[] = [];
+  for (let i = 0; i <= PINCH_POINTS; i++) pts.push(xB + ((xD - xB) * i) / PINCH_POINTS);
+  for (const x of curve.nodes ?? []) if (x > xB && x < xD) pts.push(x);
+  pts.sort((a, b) => a - b);
+
+  // Smallest gap and its pinch class at reflux R, or null if R is infeasible
+  // (intersection outside (xB, xD), or an operating line reaches y*).
+  const evaluate = (R: number): { gap: number; pinch: Pinch } | null => {
     const rs = R / (R + 1);
     const ri = xD / (R + 1);
-    const { x: xi, y: yi } = qLineIntersection(o);
+    const { x: xi, y: yi } = qLineIntersection({ xF, xD, xB, R, q });
     if (!(xi > xB && xi < xD)) return null;
     const ss = (yi - xB) / (xi - xB);
-    let gap = curve.yStar(xi) - yi;
-    let pinch: 'feed' | 'tangent-rectifying' | 'tangent-stripping' = 'feed';
-    if (gap <= GAP_MARGIN) return null;
-    for (let i = 1; i < PINCH_POINTS; i++) {
-      const x = xB + ((xD - xB) * i) / PINCH_POINTS;
-      if (Math.abs(x - xi) < 1e-9) continue; // the intersection itself, already measured as 'feed'
-      const rect = x > xi;
-      const g = curve.yStar(x) - (rect ? rs * x + ri : ss * (x - xB) + xB);
-      if (g <= GAP_MARGIN) return null;
-      if (g < gap) {
-        gap = g;
-        pinch = rect ? 'tangent-rectifying' : 'tangent-stripping';
+    const gapAt = (x: number): number => curve.yStar(x) - (x > xi ? rs * x + ri : ss * (x - xB) + xB);
+    const feedGap = curve.yStar(xi) - yi;
+    if (!(feedGap > GAP_MARGIN)) return null;
+
+    const g = pts.map(gapAt);
+    let best = feedGap;
+    let bestX = xi;
+    for (let k = 0; k < pts.length; k++) {
+      if (!(g[k] > GAP_MARGIN)) return null;
+      if (!(k === 0 || g[k] <= g[k - 1]) || !(k === pts.length - 1 || g[k] <= g[k + 1])) continue; // not a local minimum
+      // refine inside the neighbouring grid cells, on one side of xi only
+      let lo = pts[Math.max(0, k - 1)];
+      let hi = pts[Math.min(pts.length - 1, k + 1)];
+      if (lo < xi && xi < hi) {
+        if (pts[k] > xi) lo = xi;
+        else hi = xi;
+      }
+      let m = g[k];
+      let mx = pts[k];
+      for (let it = 0; it < GOLDEN_ITERS && hi - lo > 0; it++) {
+        const x1 = lo + GOLDEN * (hi - lo);
+        const x2 = hi - GOLDEN * (hi - lo);
+        const g1 = gapAt(x1);
+        const g2 = gapAt(x2);
+        if (g1 < m) [m, mx] = [g1, x1];
+        if (g2 < m) [m, mx] = [g2, x2];
+        if (g1 < g2) hi = x2;
+        else lo = x1;
+      }
+      if (!(m > GAP_MARGIN)) return null;
+      if (m < best - TIE_TOL) {
+        best = m;
+        bestX = mx;
       }
     }
-    return { gap, pinch };
+    return { gap: best, pinch: bestX === xi ? 'feed' : bestX > xi ? 'tangent-rectifying' : 'tangent-stripping' };
   };
 
+  const atZero = evaluate(0);
+  if (atZero) return { Rmin: 0, pinch: atZero.pinch };
   if (!evaluate(R_MAX)) {
     throw new StageLimitError(
-      'Rmin: no finite minimum reflux; xD is at or beyond the azeotrope / equilibrium curve, or the feed is outside (xB, xD).',
+      `Rmin: no minimum reflux found (Rmin > ${R_MAX}, xD not reachable on this equilibrium curve, or the feed/q-line intersection is outside (xB, xD)).`,
     );
   }
   let lo = 0;
