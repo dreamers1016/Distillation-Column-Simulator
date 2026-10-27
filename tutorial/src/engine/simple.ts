@@ -8,7 +8,7 @@ import { avgMW, internalFlows, K0, materialBalance, P_ATM_BAR, S_PER_H, trayCoun
 import { COMPONENTS } from './components';
 import { constantAlphaCurve } from './curve';
 import { fenske, rminPinch, stepStages } from './mccabe';
-import { MIXTURES, type MixturePreset } from './mixtures';
+import { ALPHA_XB, ALPHA_XD, MIXTURES, type MixturePreset } from './mixtures';
 import type { Inputs, Results, Warning } from './types';
 import { selectCondenser, selectReboiler } from './utilities';
 import { bubblePoint } from './vle';
@@ -83,7 +83,7 @@ export function solveSimple(inputs: Inputs, options: SimpleOptions = {}): Result
     cmoGapPct: null,
     warnings: uniqueWarnings(warnings),
     assumptions: [
-      `Constant relative volatility α = ${alpha.toFixed(4)} (geometric mean at xD and xB)`,
+      `Constant relative volatility α = ${alpha.toFixed(4)} (geometric mean at the preset default xD = ${ALPHA_XD}, xB = ${ALPHA_XB}; frozen)`,
       'Constant molar overflow',
       'Ideal (equilibrium) stages; overall efficiency E_o converts to actual trays',
       '1 atm, saturated-liquid reflux, total condenser',

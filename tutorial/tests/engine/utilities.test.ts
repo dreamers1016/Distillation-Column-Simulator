@@ -165,3 +165,68 @@ describe('solver wiring', () => {
     expect(r.reboiler.level).toBe('LP');
   });
 });
+
+describe('utility edge cases (task 7 carried fixes)', () => {
+  it('a NaN Tcond or Tbot is never feasible, auto or forced, and flows stay finite', () => {
+    for (const r of [
+      selectCondenser(NaN, 100, inputs()),
+      selectCondenser(NaN, 100, inputs({ condenserUtility: 'CW' })),
+      selectCondenser(NaN, 100, inputs({ condenserUtility: 'ChW' })),
+    ]) {
+      expect(r.feasible).toBe(false);
+      expect(r.reason.length).toBeGreaterThan(0);
+      for (const v of [r.flow_kgh, r.LMTD, r.area_m2]) expect(Number.isFinite(v)).toBe(true);
+    }
+    for (const r of [
+      selectReboiler(NaN, 100, inputs()),
+      selectReboiler(NaN, 100, inputs({ steamLevel: 'LP' })),
+      selectReboiler(NaN, 100, inputs({ steamLevel: 'HP' })),
+    ]) {
+      expect(r.feasible).toBe(false);
+      expect(r.reason.length).toBeGreaterThan(0);
+      for (const v of [r.steam_kgh, r.dT, r.area_m2]) expect(Number.isFinite(v)).toBe(true);
+    }
+  });
+  it('a NaN duty is never feasible either', () => {
+    expect(selectCondenser(65, NaN, inputs()).feasible).toBe(false);
+    expect(selectReboiler(92, NaN, inputs()).feasible).toBe(false);
+  });
+  it('editing cw.out_C moves the auto CW/ChW cut-off (cut-off = out_C + 10 °C)', () => {
+    expect(selectCondenser(55, 100, inputs()).utility).toBe('CW'); // default: 40 + 10 = 50
+    expect(selectCondenser(55, 100, inputs({ cw: { in_C: 30, out_C: 50 } })).utility).toBe('ChW'); // 50 + 10 = 60
+    expect(selectCondenser(65, 100, inputs({ cw: { in_C: 30, out_C: 50 } })).utility).toBe('CW');
+  });
+  it('editing chw.out_C moves the auto ChW/REFRIGERATION cut-off (cut-off = out_C + 10 °C)', () => {
+    expect(selectCondenser(28, 100, inputs()).utility).toBe('ChW'); // default: 12 + 10 = 22
+    const r = selectCondenser(28, 100, inputs({ chw: { in_C: 7, out_C: 20 } })); // 20 + 10 = 30
+    expect(r.utility).toBe('REFRIGERATION');
+    expect(r.feasible).toBe(false);
+    expect(r.reason).toContain('30.0');
+  });
+  it('an inverted CW range under auto falls through to ChW', () => {
+    const r = selectCondenser(65, 100, inputs({ cw: { in_C: 45, out_C: 35 } }));
+    expect(r.utility).toBe('ChW');
+    expect(r.feasible).toBe(true);
+  });
+  it('when ChW is rejected only for its invalid range, the REFRIGERATION reason says so instead of blaming the temperature', () => {
+    const r = selectCondenser(30, 100, inputs({ chw: { in_C: 12, out_C: 7 } }));
+    expect(r.utility).toBe('REFRIGERATION');
+    expect(r.feasible).toBe(false);
+    expect(r.reason).toContain('ChW range is invalid');
+    expect(r.reason).toContain('needs refrigeration — outside this tool');
+    expect(r.reason).not.toContain('is below');
+  });
+  it('HOT_OIL reason: Tbot is not at least 20 °C below HP steam', () => {
+    const h = selectReboiler(240, 100, inputs());
+    expect(h.reason).toMatch(/^Tbot 240\.0 °C is not at least 20 °C below HP steam at \d+\.\d °C: needs hot oil — outside this tool$/);
+  });
+  it('solver-level infeasible override: forcing CW on propane-butane (Tcond far below 50 °C) adds a UTILITY warning naming CW', () => {
+    const d = MIXTURES['propane-butane'].defaults;
+    const r = solveAdvanced(inputs({ mixtureId: 'propane-butane', xF: d.xF, xD: d.xD, xB: d.xB, R: d.R, feedT_C: d.feedT_C, P_bar: 1.01325, condenserUtility: 'CW' }));
+    if (!r.ok) throw new Error('expected ok');
+    expect(r.condenser.utility).toBe('CW');
+    expect(r.condenser.auto).toBe(false);
+    expect(r.condenser.feasible).toBe(false);
+    expect(r.warnings.some((w) => w.code === 'UTILITY' && w.message.includes('CW'))).toBe(true);
+  });
+});

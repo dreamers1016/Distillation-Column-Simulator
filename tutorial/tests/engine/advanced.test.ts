@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { solveAdvanced } from '../../src/engine/advanced';
+import { advancedQ, solveAdvanced } from '../../src/engine/advanced';
 import { MIXTURES, type MixtureId } from '../../src/engine/mixtures';
 import type { Inputs, Results, SolveResult } from '../../src/engine/types';
 
@@ -96,5 +96,21 @@ describe('Advanced solver, other presets', () => {
     expect(r.Ttop_C).toBeGreaterThan(50);
     expect(r.Ttop_C).toBeLessThan(56);
     expect(r.warnings.some((w) => w.code === 'IDEAL_VAPOUR')).toBe(true);
+  });
+  it('Advanced: q matches the independent reference (docs/superpowers/plans/reference/q.py) ±1e-4 at feedT 40, 80, 90, 110 °C', () => {
+    // methanol-water, xF 0.5, 1.01325 bar
+    const ref: [number, number][] = [
+      [40, 1.067402],
+      [80, 0.348937],
+      [90, -0.005055],
+      [110, -0.025253],
+    ];
+    for (const [T, q] of ref) expect(Math.abs(meoh({ feedT_C: T }).q - q)).toBeLessThanOrEqual(1e-4);
+  });
+  it('Advanced: advancedQ (used by solve() before solving) equals the solver q', () => {
+    for (const T of [40, 80, 90, 110]) {
+      const inp = inputs('methanol-water', { feedT_C: T });
+      expect(advancedQ(inp)).toBe(ok(solveAdvanced(inp)).q);
+    }
   });
 });

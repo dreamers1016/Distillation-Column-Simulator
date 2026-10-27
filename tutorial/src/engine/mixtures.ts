@@ -67,7 +67,19 @@ function make(p: Base, d: Def = {}): MixturePreset {
   return preset;
 }
 
-// simpleAlpha values: pre-computed reference; re-derived in Task 7.
+/**
+ * Compositions (mole fraction of the light component) at which the Simple-mode
+ * alpha is evaluated: the preset default product purities xD = 0.95, xB = 0.05
+ * (spec 5.3: alpha is a frozen geometric mean at the preset defaults).
+ */
+export const ALPHA_XD = 0.95;
+export const ALPHA_XB = 0.05;
+
+// simpleAlpha values: derived by scripts/derive-simple-alpha.ts (run:
+// npx vite-node scripts/derive-simple-alpha.ts), the geometric mean of
+// alpha(ALPHA_XD) and alpha(ALPHA_XB) from bubblePoint at 1.01325 bar, rounded to
+// 4 decimals and frozen here. tests/engine/solve.test.ts re-derives them and
+// fails if a frozen value drifts by more than 1e-4.
 export const MIXTURES: Record<MixtureId, MixturePreset> = {
   'methanol-water': make({
     id: 'methanol-water', name: 'Methanol - Water', light: 'methanol', heavy: 'water', model: 'nrtl',

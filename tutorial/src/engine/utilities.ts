@@ -6,6 +6,7 @@
 // An infeasible choice (auto or override) returns feasible: false with flows and
 // areas set to 0, so nothing downstream is ever NaN or Infinity.
 // Units: T in °C, duties kW, flows kg/h, areas m², bar gauge for steam levels.
+import { P_ATM_BAR } from './balance';
 import { steamSat, STEAM_LEVELS } from './steam';
 import type { Inputs } from './types';
 
@@ -21,8 +22,6 @@ const U_CONDENSER_WM2K = 800;
 const U_REBOILER_WM2K = 1000;
 /** Steam levels tried in order by the auto selection (lowest pressure first). */
 const LEVELS = ['LP', 'MP', 'HP'] as const;
-/** bar gauge -> bar absolute: add 1 standard atmosphere (ISO 2533 / BIPM: 101 325 Pa). */
-const P_ATM_BAR = 1.01325;
 
 export type CondenserUtility = 'CW' | 'ChW' | 'REFRIGERATION';
 export type ReboilerLevel = 'LP' | 'MP' | 'HP' | 'HOT_OIL';
@@ -67,10 +66,14 @@ function condenserFor(utility: 'CW' | 'ChW', auto: boolean, Tcond_C: number, Qc_
   const dT2 = Tcond_C - out_C;
   const base = { utility, auto, in_C, out_C, U_Wm2K: U_CONDENSER_WM2K };
   const fail = (reason: string): CondenserResult => ({ ...base, feasible: false, reason, flow_kgh: 0, LMTD: 0, area_m2: 0 });
+  // Guards are written so that NaN fails them (never feasible).
+  if (!Number.isFinite(Tcond_C) || !Number.isFinite(Qc_kW)) {
+    return fail(`Tcond (${Tcond_C} °C) and duty (${Qc_kW} kW) must be finite numbers`);
+  }
   if (!(out_C > in_C)) {
     return fail(`${utility} outlet ${f1(out_C)} °C must exceed inlet ${f1(in_C)} °C (Tcond ${f1(Tcond_C)} °C)`);
   }
-  if (dT2 < DT_MIN_CONDENSER_C) {
+  if (!(dT2 >= DT_MIN_CONDENSER_C)) {
     return fail(
       `Tcond ${f1(Tcond_C)} °C vs ${utility} outlet ${f1(out_C)} °C gives ΔT ${f1(dT2)} °C < ${DT_MIN_CONDENSER_C} °C minimum`,
     );
@@ -100,11 +103,17 @@ export function selectCondenser(Tcond_C: number, Qc_kW: number, inputs: Inputs):
     if (c.feasible) return c;
   }
   const chwLimit = inputs.chw.out_C + DT_MIN_CONDENSER_C;
+  // Say why ChW was rejected: an invalid range is not a temperature problem.
+  const reason = !Number.isFinite(Tcond_C) || !Number.isFinite(Qc_kW)
+    ? `Tcond (${Tcond_C} °C) and duty (${Qc_kW} kW) must be finite numbers`
+    : !(inputs.chw.out_C > inputs.chw.in_C)
+      ? `ChW range is invalid (outlet ${f1(inputs.chw.out_C)} °C must exceed inlet ${f1(inputs.chw.in_C)} °C) and CW is not feasible at Tcond ${f1(Tcond_C)} °C: needs refrigeration — outside this tool`
+      : `Tcond ${f1(Tcond_C)} °C is below ${f1(chwLimit)} °C (ChW outlet ${f1(inputs.chw.out_C)} °C + ${DT_MIN_CONDENSER_C} °C): needs refrigeration — outside this tool`;
   return {
     utility: 'REFRIGERATION',
     auto: true,
     feasible: false,
-    reason: `Tcond ${f1(Tcond_C)} °C is below ${f1(chwLimit)} °C (ChW outlet ${f1(inputs.chw.out_C)} °C + ${DT_MIN_CONDENSER_C} °C): needs refrigeration — outside this tool`,
+    reason,
     in_C: 0,
     out_C: 0,
     flow_kgh: 0,
@@ -118,8 +127,12 @@ function reboilerFor(level: 'LP' | 'MP' | 'HP', auto: boolean, Treb_C: number, Q
   const P_barg = STEAM_LEVELS[level].barg;
   const { Tsat_C, hfg_kJkg } = steamSat(P_barg + P_ATM_BAR);
   const dT = Tsat_C - Treb_C;
-  const base = { level, auto, P_barg, Tsat_C, dT, hfg_kJkg, U_Wm2K: U_REBOILER_WM2K };
-  if (dT < DT_MIN_REBOILER_C) {
+  const base = { level, auto, P_barg, Tsat_C, dT: Number.isFinite(dT) ? dT : 0, hfg_kJkg, U_Wm2K: U_REBOILER_WM2K };
+  // Guards are written so that NaN fails them (never feasible).
+  if (!Number.isFinite(Treb_C) || !Number.isFinite(Qr_kW)) {
+    return { ...base, feasible: false, reason: `Tbot (${Treb_C} °C) and duty (${Qr_kW} kW) must be finite numbers`, steam_kgh: 0, area_m2: 0 };
+  }
+  if (!(dT >= DT_MIN_REBOILER_C)) {
     return {
       ...base,
       feasible: false,
@@ -154,7 +167,7 @@ export function selectReboiler(Treb_C: number, Qr_kW: number, inputs: Inputs): R
     level: 'HOT_OIL',
     auto: true,
     feasible: false,
-    reason: `Tbot ${f1(Treb_C)} °C is within ${DT_MIN_REBOILER_C} °C of HP steam at ${f1(hp)} °C: needs hot oil — outside this tool`,
+    reason: `Tbot ${f1(Treb_C)} °C is not at least ${DT_MIN_REBOILER_C} °C below HP steam at ${f1(hp)} °C: needs hot oil — outside this tool`,
     P_barg: 0,
     Tsat_C: 0,
     dT: 0,

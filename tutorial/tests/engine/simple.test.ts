@@ -50,4 +50,8 @@ describe('Simple solver, benzene-toluene, alpha 2.5', () => {
     expect(r.TtopIsEstimate).toBe(true);
     expect(r.stages.every((s) => s.T_C === null && s.gamma === null)).toBe(true);
   });
+  it('assumptions state the alpha basis: geometric mean at the preset default xD, xB; frozen', () => {
+    const r = run();
+    expect(r.assumptions).toContain('Constant relative volatility α = 2.5000 (geometric mean at the preset default xD = 0.95, xB = 0.05; frozen)');
+  });
 });

@@ -18,7 +18,7 @@ import { bubblePoint, dewPoint, findAzeotrope, VleModelError } from './vle';
 
 /** Above this pressure the ideal-vapour assumption is flagged (spec 5.4: "fine below about 10 bar"). */
 const IDEAL_VAPOUR_P_BAR = 10;
-/** |CMO gap| above this is flagged as a teaching point (spec 5.2). */
+/** |CMO gap| above this is flagged as a teaching point (plan Task 5). */
 const CMO_GAP_WARN_PCT = 5;
 const FLASH_MAX_ITER = 200;
 const FLASH_TOL = 1e-12;
@@ -78,11 +78,19 @@ function alphaAt(mix: MixturePreset, x1: number, P: number): number {
   return (y / x1) / ((1 - y) / (1 - x1));
 }
 
-export function solveAdvanced(inputs: Inputs): SolveResult {
+/**
+ * q of the Advanced feed (feed T, column P), computed exactly as solveAdvanced
+ * does; solve() uses it to get Rmin before solving. Throws VleModelError.
+ */
+export function advancedQ(inputs: Inputs): number {
+  return feedCondition(MIXTURES[inputs.mixtureId], inputs.xF, inputs.feedT_C + K0, inputs.P_bar).q;
+}
+
+/** The AZEOTROPE error result if an azeotrope lies inside [xB, xD] at the column pressure, else null. */
+export function azeotropeError(inputs: Inputs): SolveResult | null {
   const mix = MIXTURES[inputs.mixtureId];
   const P = inputs.P_bar;
-  const { xF, xD, xB, R, Eo } = inputs;
-
+  const { xD, xB } = inputs;
   const az = findAzeotrope(mix, P);
   if (az && az.x >= xB && az.x <= xD) {
     // x to 3 decimals: the NRTL azeotrope of ethanol-water is x = 0.8954, which
@@ -98,6 +106,23 @@ export function solveAdvanced(inputs: Inputs): SolveResult {
       },
       warnings: [],
     };
+  }
+  return null;
+}
+
+export interface AdvancedOptions {
+  /** solve() has already run azeotropeError (a scan of ~40 ms); skip repeating it. */
+  azeotropeChecked?: boolean;
+}
+
+export function solveAdvanced(inputs: Inputs, options: AdvancedOptions = {}): SolveResult {
+  const mix = MIXTURES[inputs.mixtureId];
+  const P = inputs.P_bar;
+  const { xF, xD, xB, R, Eo } = inputs;
+
+  if (!options.azeotropeChecked) {
+    const azeo = azeotropeError(inputs);
+    if (azeo) return azeo;
   }
 
   const curve = vleCurve(mix, P);
