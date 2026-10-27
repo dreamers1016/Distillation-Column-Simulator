@@ -265,15 +265,6 @@ export function vesselV(r: number, len: number, ms: PartMaterials, cut: boolean,
   return g;
 }
 
-/** Horizontal vessel: vesselV turned so its axis runs along x (the cut plane stays z = 0). */
-export function vesselH(r: number, len: number, ms: PartMaterials, cut: boolean, o: VesselOpts = {}): Group {
-  const outer = new Group();
-  const v = vesselV(r, len, ms, cut, o);
-  v.rotation.z = -Math.PI / 2; // local +y → world +x
-  outer.add(v);
-  return outer;
-}
-
 /** Nozzle: neck + weld-neck flange, along `dir` from `pos`. `blind` adds a bolted blind (manway). */
 export function nozzle(ms: PartMaterials, r: number, len: number, pos: Vector3, dir: Vector3, blind = false): Group {
   const g = new Group();
