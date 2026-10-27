@@ -9,7 +9,8 @@ import { COMPONENTS } from './components';
 import { constantAlphaCurve } from './curve';
 import { fenske, rminPinch, stepStages } from './mccabe';
 import { MIXTURES, type MixturePreset } from './mixtures';
-import type { Inputs, Results } from './types';
+import type { Inputs, Results, Warning } from './types';
+import { selectCondenser, selectReboiler } from './utilities';
 import { bubblePoint } from './vle';
 
 export interface SimpleOptions {
@@ -44,6 +45,11 @@ export function solveSimple(inputs: Inputs, options: SimpleOptions = {}): Result
   const top = bubblePoint(idealMix, xD, P_ATM_BAR);
   const bot = bubblePoint(idealMix, xB, P_ATM_BAR);
 
+  const condenser = selectCondenser(top.T_K - K0, Qc_kW, inputs);
+  const reboiler = selectReboiler(bot.T_K - K0, Qr_kW, inputs);
+  const warnings: Warning[] = [...top.warnings, ...bot.warnings];
+  for (const u of [condenser, reboiler]) if (!u.feasible) warnings.push({ code: 'UTILITY', message: u.reason });
+
   return {
     ok: true,
     mode: 'simple',
@@ -72,8 +78,10 @@ export function solveSimple(inputs: Inputs, options: SimpleOptions = {}): Result
     TtopIsEstimate: true,
     Qc_kW,
     Qr_kW,
+    condenser,
+    reboiler,
     cmoGapPct: null,
-    warnings: uniqueWarnings([...top.warnings, ...bot.warnings]),
+    warnings: uniqueWarnings(warnings),
     assumptions: [
       `Constant relative volatility α = ${alpha.toFixed(4)} (geometric mean at xD and xB)`,
       'Constant molar overflow',

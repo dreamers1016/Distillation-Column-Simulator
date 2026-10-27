@@ -13,6 +13,7 @@ import { hL, hV, hVsuperheated, lambdaMix } from './enthalpy';
 import { fenske, nminTotalReflux, rminPinch, stepStages } from './mccabe';
 import { MIXTURES, type MixturePreset } from './mixtures';
 import type { Inputs, SolveResult, StageRow, Warning } from './types';
+import { selectCondenser, selectReboiler } from './utilities';
 import { bubblePoint, dewPoint, findAzeotrope, VleModelError } from './vle';
 
 /** Above this pressure the ideal-vapour assumption is flagged (spec 5.4: "fine below about 10 bar"). */
@@ -164,6 +165,10 @@ export function solveAdvanced(inputs: Inputs): SolveResult {
     });
   }
 
+  const condenser = selectCondenser(top.T_K - K0, Qc_kW, inputs);
+  const reboiler = selectReboiler(bot.T_K - K0, Qr_kW, inputs);
+  for (const u of [condenser, reboiler]) if (!u.feasible) warnings.push({ code: 'UTILITY', message: u.reason });
+
   return {
     ok: true,
     mode: 'advanced',
@@ -192,6 +197,8 @@ export function solveAdvanced(inputs: Inputs): SolveResult {
     TtopIsEstimate: false,
     Qc_kW,
     Qr_kW,
+    condenser,
+    reboiler,
     cmoGapPct,
     warnings: uniqueWarnings(warnings),
     assumptions: [

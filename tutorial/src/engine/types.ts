@@ -1,6 +1,7 @@
 // Shared engine types. Units convention for all thermo functions:
 // pressure in bar (absolute), temperature in K.
 import type { MixtureId, MixturePreset } from './mixtures';
+import type { CondenserResult, ReboilerResult } from './utilities';
 
 export type ComponentId =
   | 'water'
@@ -29,7 +30,7 @@ export interface Warning {
 
 // ---- Solver inputs and results (shared by Simple and Advanced modes) ----
 // Units: flows kmol/h unless suffixed _kgh; duties kW; P bar abs; T in °C
-// where suffixed _C. condenser/reboiler sizing is added by the utilities task.
+// where suffixed _C.
 
 export type Mode = 'simple' | 'advanced';
 
@@ -93,6 +94,8 @@ export interface Results {
   TtopIsEstimate: boolean;
   Qc_kW: number;
   Qr_kW: number;
+  condenser: CondenserResult;
+  reboiler: ReboilerResult;
   cmoGapPct: number | null;
   warnings: Warning[];
   assumptions: string[];
