@@ -23,14 +23,45 @@ body {
   inset: 0;
 }
 
-/* Full-viewport stage for the 3D scene (Task 9+); labels overlay it. */
-#stage,
-#labels {
+/* Full-viewport stage for the 3D scene, behind the top bar (z 10) and panel (z 5).
+   The scene creates its own CSS2D label overlay inside it. */
+#stage {
   position: fixed;
   inset: 0;
+  z-index: 0;
 }
-#labels {
+
+/* ---- 3D labels (CSS2DRenderer) ------------------------------------------ */
+.pin {
+  font: 700 11px/1 var(--font);
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  padding: 4px 7px;
+  background: #fff;
+  border: 1px solid var(--control-line);
+  border-radius: 5px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   pointer-events: none;
+}
+.pin.clickable {
+  pointer-events: auto;
+  cursor: pointer;
+}
+.pin.clickable::before {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 5px;
+  vertical-align: middle;
+  border-radius: 50%;
+  background: var(--teal);
+}
+body.view-explore .pin {
+  font-size: 11px;
+}
+body.view-lecture .pin {
+  font-size: 14px;
 }
 
 /* ---- top bar ---------------------------------------------------------- */
