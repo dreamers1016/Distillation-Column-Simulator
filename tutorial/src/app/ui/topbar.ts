@@ -26,7 +26,7 @@ export function mountTopbar(host: HTMLElement, store: Store): () => void {
       h('div', { class: 'seg', role: 'group', 'aria-label': 'View' }, lecture, explore),
       h('div', { class: 'seg', role: 'group', 'aria-label': 'Calculation mode' }, simple, advanced),
       h('div', { class: 'seg', role: 'group', 'aria-label': 'Column view' }, cutaway),
-      h('a', { class: 'toplink', href: 'components.html' }, 'Components'),
+      h('a', { class: 'toplink', href: '#components' }, 'Components'),
     ),
   );
   host.append(bar);

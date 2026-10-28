@@ -1,6 +1,8 @@
 import './styles/tokens.css';
 import './styles/app.css';
 import { createStore, type PartRef } from './app/state';
+import { mountCards } from './app/ui/cards';
+import { mountComponentsPage } from './app/ui/componentsPage';
 import { mountPanel } from './app/ui/panel';
 import { mountToast } from './app/ui/toast';
 import { mountTopbar } from './app/ui/topbar';
@@ -17,6 +19,10 @@ if (!app) throw new Error('#app container missing from index.html');
 const store = createStore();
 mountTopbar(app, store);
 mountPanel(app, store);
+// Selected-part card: Explore panel slot, or a large overlay in Lecture view. Hovering
+// "deck" / "weir" / "downcomer" on a tray card lights that sub-mesh (plant is built below).
+mountCards(app, store, { onSub: (tray, sub) => plant?.highlightSub(tray, sub) });
+mountComponentsPage(app, store);
 mountToast(app, store);
 
 // 3D stage behind the UI: the procedural plant is rebuilt from the last valid result.

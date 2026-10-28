@@ -115,11 +115,19 @@ export interface Plant {
   legend: LegendEntry[];
   /** Light the part's materials with the teal emissive; null clears. */
   highlight(part: PartRef | null): void;
+  /**
+   * Light one sub-mesh of a tray (its deck, weir or downcomer) with the teal emissive,
+   * for the tray card's hover words; null restores the tray to its normal or selected look.
+   */
+  highlightSub(tray: number, sub: TraySub | null): void;
   /** 50 % opacity on every material (the last valid plant shown under an error). */
   setGhost(on: boolean): void;
   /** Remove from the scene and remove label elements. Materials (pooled) and geometry (shared) stay. */
   dispose(): void;
 }
+
+/** Tray sub-meshes tagged in geometry/trays.ts (`userData.sub`; also their material keys). */
+export type TraySub = 'deck' | 'weir' | 'downcomer';
 
 const partKey = (p: PartRef) => (p.kind === 'tray' ? `tray:${p.tray ?? 0}` : p.kind);
 
@@ -321,6 +329,15 @@ export function buildPlant(r: Results, opts: PlantOptions): Plant {
       if (lit) setEmissive(lit, false);
       lit = part ? partKey(part) : null;
       if (lit) setEmissive(lit, true);
+    },
+    highlightSub(tray, sub) {
+      const key = partKey({ kind: 'tray', tray });
+      // Restore the tray first: teal if it is the selected part, its base look otherwise.
+      setEmissive(key, lit === key);
+      if (!sub) return;
+      setEmissive(key, false);
+      const m = sets.get(key)?.find(sub) as MeshStandardMaterial | undefined;
+      m?.emissive?.setHex(HIGHLIGHT_EMISSIVE);
     },
     setGhost(on) {
       for (const s of allSets()) {

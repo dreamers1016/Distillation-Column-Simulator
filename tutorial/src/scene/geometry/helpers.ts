@@ -138,6 +138,11 @@ export class PartMaterials {
     return [...this.byKind.values()];
   }
 
+  /** The material stored under `key` (e.g. a tray's 'deck', 'weir' or 'downcomer'), if any. */
+  find(key: string): Material | undefined {
+    return this.byKind.get(key);
+  }
+
   /** Back to the baseline look: no highlight, no ghosting. */
   reset(): void {
     for (const m of this.byKind.values()) {

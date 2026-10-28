@@ -356,6 +356,41 @@ describe('highlight and ghosting', () => {
     p.dispose();
   });
 
+  it('highlightSub lights only that sub-mesh of one tray and restores on leave', () => {
+    const p = buildPlant(withTrays(15, 8), opts());
+    const trays = partsOf(p.group, 'tray');
+    const tray = (n: number) => trays.find((t) => (t.userData.part as PartRef).tray === n) as Object3D;
+    const subEmissive = (n: number, sub: string) => {
+      const out = new Set<number>();
+      tray(n).traverse((c) => {
+        if ((c as Mesh).isMesh && c.userData.sub === sub) out.add(((c as Mesh).material as MeshStandardMaterial).emissive.getHex());
+      });
+      return out;
+    };
+    for (const sub of ['deck', 'weir', 'downcomer'] as const) {
+      p.highlightSub(3, sub);
+      expect(subEmissive(3, sub)).toEqual(new Set([HIGHLIGHT_EMISSIVE]));
+      for (const other of ['deck', 'weir', 'downcomer'].filter((s) => s !== sub)) {
+        expect(subEmissive(3, other).has(HIGHLIGHT_EMISSIVE), `${sub} lit ${other}`).toBe(false);
+      }
+      expect(subEmissive(4, sub).has(HIGHLIGHT_EMISSIVE)).toBe(false);
+    }
+    p.highlightSub(3, null);
+    expect(emissiveOf(tray(3)).has(HIGHLIGHT_EMISSIVE)).toBe(false);
+    // With tray 3 selected, leaving the word restores the whole-tray highlight.
+    p.highlight({ kind: 'tray', tray: 3 });
+    p.highlightSub(3, 'weir');
+    expect(subEmissive(3, 'deck').has(HIGHLIGHT_EMISSIVE)).toBe(false);
+    p.highlightSub(3, null);
+    expect(emissiveOf(tray(3))).toEqual(new Set([HIGHLIGHT_EMISSIVE]));
+    // The feed tray deck keeps its own base glow after a hover.
+    p.highlight(null);
+    p.highlightSub(8, 'deck');
+    p.highlightSub(8, null);
+    expect(subEmissive(8, 'deck')).toEqual(new Set([FEED_TRAY_EMISSIVE]));
+    p.dispose();
+  });
+
   it('setGhost(true) puts every material at <= 50 % opacity and setGhost(false) restores it', () => {
     const p = buildPlant(withTrays(15, 8), opts());
     const mats = () => {

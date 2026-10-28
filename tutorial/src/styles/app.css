@@ -436,3 +436,199 @@ input:focus-visible {
   color: var(--muted, var(--ink));
   font-size: 11px;
 }
+
+/* ---- component cards (spec §6) ---------------------------------------- */
+.card {
+  position: relative;
+  color: var(--ink);
+  line-height: 1.4;
+}
+.card header {
+  margin-bottom: 6px;
+  padding-right: 34px;
+}
+.card-tag {
+  display: block;
+  font-size: 0.75em;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--teal);
+}
+.card h3 {
+  margin: 2px 0 0;
+  font-size: 1.25em;
+}
+.card h4 {
+  margin: 12px 0 4px;
+  font-size: 0.75em;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.card p {
+  margin: 0;
+}
+.card dl {
+  display: grid;
+  grid-template-columns: minmax(8em, 40%) 1fr;
+  gap: 3px 10px;
+  margin: 0;
+}
+.card dt {
+  color: var(--muted);
+}
+.card dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+.card ul {
+  margin: 0;
+  padding-left: 1.1em;
+}
+.card li + li {
+  margin-top: 3px;
+}
+.card .eq {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0 2px;
+}
+.card .eq .katex-display {
+  margin: 0.35em 0;
+}
+.card-close {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--control-line);
+  border-radius: 50%;
+  background: #fff;
+  font: 700 18px/1 var(--font);
+  color: var(--ink);
+  cursor: pointer;
+}
+.card-close:hover,
+.card-close:focus-visible {
+  border-color: var(--teal);
+  color: var(--teal);
+  outline: none;
+}
+.sub-word {
+  color: var(--teal);
+  font-weight: 700;
+  border-bottom: 2px dotted var(--teal);
+  cursor: help;
+}
+.sub-word:hover,
+.sub-word:focus-visible {
+  background: #14a3a022;
+  outline: none;
+}
+[data-slot='selected-part'] {
+  margin-top: 14px;
+  padding: 14px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+/* Lecture view: the card as a projector-sized overlay (body text >= 22 px at 1080p). */
+.card-overlay {
+  position: fixed;
+  inset: var(--topbar-h) 0 0 0;
+  z-index: 15;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: 16px 24px 24px;
+  background: rgba(31, 42, 54, 0.18);
+}
+.card-overlay[hidden] {
+  display: none;
+}
+.card-overlay-body {
+  width: min(1100px, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 26px 30px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 10px 40px #0003;
+}
+.card--overlay {
+  font-size: 22px;
+}
+.card--overlay .card-close {
+  width: 44px;
+  height: 44px;
+  font-size: 26px;
+}
+@media (min-width: 1700px) {
+  .card--overlay {
+    font-size: 24px;
+  }
+}
+
+/* ---- Components page (in-app view, #components) ----------------------- */
+.components-page {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  overflow-y: auto;
+  background-color: var(--paper);
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+.components-page[hidden] {
+  display: none;
+}
+.components-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 12px 24px;
+  background: var(--card);
+  border-bottom: 1px solid var(--line);
+}
+.components-head h2 {
+  margin: 0;
+  font-size: 22px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.components-head small {
+  color: var(--muted);
+  font-size: 14px;
+}
+.components-head .toplink {
+  cursor: pointer;
+}
+.components-body {
+  padding: 20px 24px 40px;
+}
+.components-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(560px, 100%), 1fr));
+  gap: 18px;
+  align-items: start;
+}
+.components-cell {
+  padding: 18px 20px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font-size: 17px;
+}
+.components-body .empty {
+  color: var(--muted);
+}
