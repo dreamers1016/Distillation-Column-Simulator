@@ -54,6 +54,15 @@ export class Presenter {
   } | null;
   /** Caption cache: templates may run extra solves, so only re-run on a new result or step. */
   private shown: { key: string; r: unknown } = { key: '', r: null };
+  /**
+   * True when focus last moved by pointer (a click on a dot or a top-bar button), false
+   * after Tab. A clicked button keeps focus, and Space would click it again; for a
+   * lecturer at a projector, Space should mean "next" unless they tabbed to a control.
+   */
+  private pointerFocus = true;
+  private readonly onPointerDown = () => {
+    this.pointerFocus = true;
+  };
 
   constructor(
     private readonly store: Store,
@@ -65,7 +74,11 @@ export class Presenter {
     this.ui = opts.root ? this.mount(opts.root) : null;
 
     window.addEventListener('keydown', this.onKey);
-    this.offs.push(() => window.removeEventListener('keydown', this.onKey));
+    window.addEventListener('pointerdown', this.onPointerDown, true);
+    this.offs.push(() => {
+      window.removeEventListener('keydown', this.onKey);
+      window.removeEventListener('pointerdown', this.onPointerDown, true);
+    });
     this.offs.push(
       store.subscribe((s) => {
         if (s.view !== this.view) {
@@ -134,13 +147,19 @@ export class Presenter {
   }
 
   private readonly onKey = (e: KeyboardEvent) => {
+    if (e.key === 'Tab') this.pointerFocus = false;
     if (this.store.get().view !== 'lecture' || e.defaultPrevented) return;
     if (e.altKey || e.ctrlKey || e.metaKey || isTyping(e.target)) return;
     if (document.querySelector('.components-page:not([hidden])')) return; // another page is on top
     const forward = FORWARD.has(e.key);
     if (!forward && !BACK.has(e.key)) return;
-    // Space on a focused button already clicks it; do not step twice.
-    if ((e.key === ' ' || e.key === 'Spacebar') && e.target instanceof HTMLElement && e.target.closest('button, a')) return;
+    const control = e.target instanceof HTMLElement ? e.target.closest<HTMLElement>('button, a') : null;
+    if ((e.key === ' ' || e.key === 'Spacebar') && control) {
+      // Tabbed to a control: Space activates it natively. Clicked it: Space means "next",
+      // so drop the focus that would otherwise make the keyup click it again.
+      if (!this.pointerFocus) return;
+      control.blur();
+    }
     e.preventDefault();
     if (forward) this.next();
     else this.prev();

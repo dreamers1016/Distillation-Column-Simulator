@@ -23,7 +23,7 @@ class FakeDom {
     this.map.get(type)?.delete(fn);
   }
   emit(type: string, props: Record<string, number> = {}) {
-    const e = Object.assign(new Event(type), { pointerId: 1, button: 0, clientX: 0, clientY: 0, ...props });
+    const e = Object.assign(new Event(type), { pointerId: 1, button: 0, buttons: 1, clientX: 0, clientY: 0, ...props });
     this.map.get(type)?.forEach((fn) => fn(e));
   }
   count() {
@@ -207,6 +207,17 @@ describe('CameraDirector', () => {
     expect(director.flying).toBe(true);
     simulate(4, 60, (dt) => director.update(dt));
     expect(director.flying).toBe(false); // and it still settles
+  });
+
+  it('a lost pointerup leaves no stale press: a later move with no button held does not cancel', () => {
+    const { dom, director } = make();
+    dom.emit('pointerdown', { clientX: 100, clientY: 100 });
+    // the pointerup never arrives (released outside the window)
+    director.flyTo(new Vector3(0, 30, 0), 6);
+    dom.emit('pointermove', { clientX: 400, clientY: 100, buttons: 0 });
+    expect(director.flying).toBe(true);
+    dom.emit('pointermove', { clientX: 600, clientY: 100 }); // the stale entry is gone
+    expect(director.flying).toBe(true);
   });
 
   it('moving without a pressed pointer (hover) does not cancel; a wheel zoom does', () => {

@@ -23,6 +23,12 @@ const captionOf = (k: number) => {
   return lecture.steps[k].caption(okSolve(i), i);
 };
 
+/** Disposers registered by a test, run in afterEach so a failed assertion cannot leak listeners. */
+const cleanup: Array<() => void> = [];
+const runCleanup = () => {
+  for (const off of cleanup.splice(0).reverse()) off();
+};
+
 /** Every anchor at a distinct point, so a flight's target names its anchor. */
 function fakeAnchors(): Record<AnchorKey, Anchor> {
   const keys: AnchorKey[] = [
@@ -68,6 +74,44 @@ describe('v1 lecture script', () => {
     expect(text).toContain(`Advanced N = ${advancedN}`);
   });
 
+  it('step 8 lists representative tray temperatures from the profile (top, feed, stripping, reboiler)', () => {
+    const i = lectureInputs(lecture, 7);
+    const r = okSolve(i);
+    const text = captionOf(7);
+    const p = r.trayProfile ?? [];
+    const T = (tray: number) => `${p[tray - 1].T_C.toFixed(1)} °C`;
+    expect(text).toContain(`Tray 1: ${T(1)}`);
+    expect(text).toContain(`tray ${r.feedTray} (feed): ${T(r.feedTray)}`);
+    const strip = Math.round((r.feedTray + p.length) / 2);
+    expect(text).toContain(`tray ${strip}: ${T(strip)}`);
+    expect(text).toContain(`reboiler: ${r.Tbot_C.toFixed(1)} °C`);
+    expect(text).toMatch(/interpolated/);
+  });
+
+  it('step 9 offers the inputs of the current mode: feed temperature in Advanced, q in Simple', () => {
+    const adv = captionOf(8);
+    expect(lectureInputs(lecture, 8).mode).toBe('advanced');
+    expect(adv).toMatch(/feed temperature/);
+    expect(adv).not.toMatch(/\bq\b/);
+    expect(adv).toMatch(/ethanol–water \(Advanced only\)/);
+    const i = { ...lectureInputs(lecture, 8), mode: 'simple' as const };
+    const simple = lecture.steps[8].caption(okSolve(i), i);
+    expect(simple).toMatch(/change R, q,/);
+    expect(simple).not.toMatch(/feed temperature/);
+  });
+
+  it('steps 6 and 7 show fractional stages and give each duty a reference', () => {
+    const r6 = okSolve(lectureInputs(lecture, 5));
+    const r7 = okSolve(lectureInputs(lecture, 6));
+    const preset = okSolve(lectureInputs(lecture, 0)); // R = 2.5
+    expect(captionOf(5)).toContain(`${r6.Nfrac.toFixed(1)} theoretical stages`);
+    expect(captionOf(5)).toContain(`from ${Math.round(preset.Qr_kW)} kW at R = 2.5`);
+    expect(captionOf(6)).toContain(`${r7.Nfrac.toFixed(1)} theoretical stages`);
+    expect(captionOf(6)).toContain(`${preset.Nfrac.toFixed(1)} at R = 2.5`);
+    expect(captionOf(6)).toMatch(/1\.2–1\.5 × Rmin/);
+    for (const k of [5, 6]) expect(captionOf(k)).toMatch(/\(\d+\.\d × Rmin\)|is only \d+\.\d × Rmin/);
+  });
+
   it('step 4 turns the cutaway on and looks at a tray', () => {
     expect(lecture.steps[3].cutaway).toBe(true);
     expect(lecture.steps[3].focus).toBe('tray');
@@ -79,7 +123,7 @@ describe('v1 lecture script', () => {
       expect(text).not.toMatch(/blue liquid|orange/i);
       expect(text).not.toMatch(/NaN|undefined|Infinity|\[object/);
       expect(text).toMatch(/methanol|water/);
-      expect(text.split(/\s+/).length).toBeLessThanOrEqual(60);
+      expect(text.split(/\s+/).length).toBeLessThanOrEqual(50);
     }
     const r = okSolve(lectureInputs(lecture, 0));
     expect(captionOf(0)).toContain('95 mol % methanol');
@@ -96,6 +140,7 @@ describe('progress (localStorage wrapped, in-memory fallback)', () => {
   });
   afterEach(() => {
     vi.restoreAllMocks();
+    runCleanup();
   });
 
   it('records steps and cards and persists them', () => {
@@ -132,12 +177,11 @@ describe('progress (localStorage wrapped, in-memory fallback)', () => {
 
   it('marks a card when a part is selected (opened)', () => {
     const store = createStore(defaultState());
-    const off = trackCardViews(store);
+    cleanup.push(trackCardViews(store));
     store.set({ selected: { kind: 'feed' } });
     store.set({ selected: { kind: 'tray', tray: 3 } });
     store.set({ selected: null });
     expect(getProgress().cards).toEqual(['feed', 'tray']);
-    off();
   });
 });
 
@@ -195,6 +239,31 @@ describe('Presenter', () => {
     key(' ');
     expect(store.get().step).toBe(2);
     expect(store.get()).toBe(before);
+  });
+
+  it('Space after a mouse click on a step dot advances instead of re-clicking the dot', () => {
+    const dots = root.querySelectorAll<HTMLButtonElement>('.presenter .step-dot');
+    dots[3].dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dots[3].focus();
+    dots[3].click();
+    expect(store.get().step).toBe(3);
+    const ev = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true });
+    dots[3].dispatchEvent(ev);
+    expect(store.get().step).toBe(4);
+    expect(ev.defaultPrevented).toBe(true); // no native click on keyup
+    expect(document.activeElement).not.toBe(dots[3]);
+  });
+
+  it('Space on a control reached with Tab is left to the control (native activation)', () => {
+    const dots = root.querySelectorAll<HTMLButtonElement>('.presenter .step-dot');
+    key('Tab');
+    dots[2].focus();
+    const ev = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true });
+    dots[2].dispatchEvent(ev);
+    expect(store.get().step).toBe(0);
+    expect(ev.defaultPrevented).toBe(false);
+    key('PageDown', dots[2]); // other keys still step
+    expect(store.get().step).toBe(1);
   });
 
   it('keys are ignored while typing in a form field', () => {
@@ -290,6 +359,7 @@ describe('Presenter', () => {
 });
 
 describe('lesson strip', () => {
+  afterEach(runCleanup);
   beforeEach(() => {
     localStorage.clear();
     resetProgressForTests();
@@ -301,7 +371,7 @@ describe('lesson strip', () => {
     const store = createStore({ ...defaultState(), view: 'explore', inputs: { ...defaultInputs(), R: 3 } });
     const fly = vi.fn();
     const presenter = new Presenter(store, { flyTo: fly }, { root, anchors: () => fakeAnchors() });
-    const off = mountLessons(root, store, presenter);
+    cleanup.push(() => presenter.dispose(), mountLessons(root, store, presenter));
     markStep('mw-intro', 0);
     markStep('mw-intro', 1);
     const item = root.querySelector<HTMLButtonElement>('.lessons [data-lecture="mw-intro"]') as HTMLButtonElement;
@@ -313,7 +383,5 @@ describe('lesson strip', () => {
     expect(store.get().step).toBe(0);
     expect(store.get().inputs.R).toBe(lectureInputs(lecture, 0).R);
     expect(fly).toHaveBeenCalled();
-    off();
-    presenter.dispose();
   });
 });

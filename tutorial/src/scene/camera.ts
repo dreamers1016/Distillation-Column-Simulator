@@ -106,6 +106,11 @@ export class CameraDirector {
     if (e.type === 'pointerdown') {
       this.down.set(e.pointerId, [e.clientX, e.clientY]);
     } else if (e.type === 'pointermove') {
+      // No button held: the pointerup was lost (released outside the window, etc.).
+      if (e.buttons === 0) {
+        this.down.delete(e.pointerId);
+        return;
+      }
       const at = this.down.get(e.pointerId);
       if (at && !isClick(at, [e.clientX, e.clientY])) this.active = false;
     } else {

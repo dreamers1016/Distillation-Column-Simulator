@@ -96,7 +96,7 @@ function steamSentence(r: Results): string {
   const at = `${s.level} steam (${fmtNum(s.P_barg, 1)} barg, ${fmtNum(s.Tsat_C, 1)} °C)`;
   const dT = `ΔT = ${fmtNum(s.dT, 1)} °C (≥ ${DT_MIN_REBOILER_C} °C needed)`;
   return s.auto
-    ? `${at} is the cheapest level that still gives ${dT}.`
+    ? `${at} is the cheapest level giving ${dT}.`
     : `${at} was chosen by hand; it gives ${dT}.`;
 }
 
@@ -105,9 +105,26 @@ function coolantSentence(r: Results): string {
   if (!c.feasible) return `No cooling water works: ${c.reason}.`;
   const water = c.utility === 'CW' ? 'Cooling water' : 'Chilled water';
   const approach = fmtNum(r.Ttop_C - c.out_C, 1);
-  const why = `its outlet stays ${approach} °C below the condensing temperature (≥ ${DT_MIN_CONDENSER_C} °C needed)`;
+  const why = `outlet ${approach} °C below the condensing temperature (≥ ${DT_MIN_CONDENSER_C} °C needed)`;
   if (c.utility === 'ChW' && c.auto) return `Cooling water would come out too warm, so chilled water at ${fmtNum(c.in_C, 0)} → ${fmtNum(c.out_C, 0)} °C is used: ${why}.`;
   return `${water} at ${fmtNum(c.in_C, 0)} → ${fmtNum(c.out_C, 0)} °C works: ${why}.`;
+}
+
+/**
+ * Advanced tray temperatures for a projector: top tray, feed tray, a stripping tray
+ * (midway between the feed and the bottom tray) and the reboiler. Actual-tray values
+ * are interpolated in stage index by the engine, and the text says so.
+ */
+function profileSentence(r: Results): string | null {
+  const p = r.trayProfile;
+  if (!p || p.length === 0) return null;
+  const at = (tray: number) => p[Math.min(Math.max(tray, 1), p.length) - 1];
+  const picks = [at(1)];
+  if (r.feedTray > 1) picks.push(at(r.feedTray));
+  const strip = Math.round((r.feedTray + p.length) / 2);
+  if (strip > r.feedTray && strip < p.length) picks.push(at(strip));
+  const parts = picks.map((t) => `tray ${t.tray}${t.tray === r.feedTray ? ' (feed)' : ''}: ${fmtNum(t.T_C, 1)} °C`);
+  return `${parts.join(', ')}, reboiler: ${fmtNum(r.Tbot_C, 1)} °C (trays interpolated)`;
 }
 
 /** Solve the same inputs at another R or mode (comparison captions); null if that fails. */
@@ -137,6 +154,7 @@ const MW_INTRO: Lecture = {
     {
       title: 'Feed and the feed condition q',
       focus: 'feed',
+      zoomOut: 1.6, // keep the 'Feed → tray k' label (left of the nozzle) clear of the caption
       cutaway: true,
       caption: (r) => {
         const { light, heavy } = names(r);
@@ -149,7 +167,7 @@ const MW_INTRO: Lecture = {
       zoomOut: 1.8, // the column stands just left of the reboiler: keep it right of the caption
       caption: (r, i) => {
         const { heavy } = names(r);
-        return `The kettle reboiler boils part of the bottom-tray liquid into the vapour that drives the separation (Qr = ${fmtKW(r.Qr_kW)}); the rest leaves as bottoms: ${pct(1 - i.xB)} mol % ${heavy} at ${temp(r, r.Tbot_C)}. ${steamSentence(r)}`;
+        return `The kettle reboiler boils part of the bottom-tray liquid to make the column's vapour (Qr = ${fmtKW(r.Qr_kW)}); the rest leaves as bottoms, ${pct(1 - i.xB)} mol % ${heavy} at ${temp(r, r.Tbot_C)}. ${steamSentence(r)}`;
       },
     },
     {
@@ -158,14 +176,14 @@ const MW_INTRO: Lecture = {
       cutaway: true,
       caption: (r, i) => {
         const { light } = names(r);
-        return `Liquid crosses the perforated deck, spills over the weir and falls down the downcomer to the tray below; vapour rises through the holes and bubbles through it. Each tray up is richer in ${light}: from ${pct(i.xB)} mol % in the bottoms to ${pct(i.xD)} mol % in the distillate (particle colours, bottom left).`;
+        return `Liquid crosses the perforated deck, spills over the weir and drops down the downcomer; vapour rises through the holes and bubbles through it. Each tray up is richer in ${light}: ${pct(i.xB)} mol % in the bottoms, ${pct(i.xD)} mol % in the distillate (particle colours, bottom left).`;
       },
     },
     {
       title: 'Condenser, reflux drum and R',
       focus: 'condenser',
       caption: (r, i) =>
-        `The total condenser liquefies all the top vapour at ${temp(r, r.Ttop_C)}: Qc = ${fmtKW(r.Qc_kW)}. ${coolantSentence(r)} The reflux drum returns L to the column and sends D on as product: R = L/D = ${plain(i.R)}.`,
+        `The total condenser liquefies the top vapour at ${temp(r, r.Ttop_C)}: Qc = ${fmtKW(r.Qc_kW)}. ${coolantSentence(r)} The drum returns L as reflux and sends D on: R = L/D = ${plain(i.R)}.`,
     },
     {
       title: 'Low reflux, near Rmin',
@@ -174,7 +192,10 @@ const MW_INTRO: Lecture = {
       cutaway: true,
       caption: (r, i) => {
         const { light, heavy } = names(r);
-        return `For ${light}–${heavy}, R = ${plain(i.R)} is only ${fmtNum(i.R / r.Rmin, 2)} × Rmin (Rmin = ${fmtNum(r.Rmin, 2)}). The operating lines crowd the equilibrium curve, so the column needs ${r.N} theoretical stages (${trays(r)}), but the reboiler duty falls to ${fmtKW(r.Qr_kW)}. At Rmin itself the stage count would be infinite.`;
+        const presetR = MIXTURES[i.mixtureId].defaults.R;
+        const ref = solveAt(i, { R: presetR });
+        const from = ref ? ` from ${fmtKW(ref.Qr_kW)} at R = ${plain(presetR)}` : '';
+        return `For ${light}–${heavy}, R = ${plain(i.R)} is only ${fmtNum(i.R / r.Rmin, 1)} × Rmin (Rmin = ${fmtNum(r.Rmin, 2)}). The operating lines crowd the equilibrium curve: ${fmtNum(r.Nfrac, 1)} theoretical stages (${trays(r)}), but Qr falls to ${fmtKW(r.Qr_kW)}${from}. At Rmin the stage count would be infinite.`;
       },
     },
     {
@@ -183,12 +204,19 @@ const MW_INTRO: Lecture = {
       set: { R: 4 },
       cutaway: true,
       caption: (r, i) => {
+        const presetR = MIXTURES[i.mixtureId].defaults.R;
+        const mid = solveAt(i, { R: presetR });
         const lowR = nearRmin(r.Rmin);
         const low = solveAt(i, { R: lowR });
-        const vs = low ? ` (vs ${low.actualTrays} at R = ${plain(lowR)})` : '';
-        const from = low ? `, up from ${fmtKW(low.Qr_kW)}` : '';
         const { light, heavy } = names(r);
-        return `At R = ${plain(i.R)} (${fmtNum(i.R / r.Rmin, 1)} × Rmin) the operating lines sit far from the ${light}–${heavy} equilibrium curve: ${r.N} theoretical stages, ${trays(r)}${vs}. But more reflux means more vapour, V = (R + 1)D, so Qr = ${fmtKW(r.Qr_kW)}${from}. Fewer trays save capital; more reflux costs energy.`;
+        const name = `${light}–${heavy}`;
+        const stages = `${name[0].toUpperCase()}${name.slice(1)} at R = ${plain(i.R)} (${fmtNum(i.R / r.Rmin, 1)} × Rmin) needs ${fmtNum(r.Nfrac, 1)} theoretical stages`;
+        // Fractional stages show the diminishing return that whole trays hide.
+        const diminishing = mid ? `, barely fewer than ${fmtNum(mid.Nfrac, 1)} at R = ${plain(presetR)}` : '';
+        const cost = low
+          ? `But V = (R + 1)D is ${fmtNum(r.V / low.V, 1)}× that at R = ${plain(lowR)}: wider column, bigger exchangers, Qr = ${fmtKW(r.Qr_kW)} vs ${fmtKW(low.Qr_kW)}.`
+          : `But V = (R + 1)D grows with R: wider column, bigger exchangers, Qr = ${fmtKW(r.Qr_kW)}.`;
+        return `${stages}${diminishing}. ${cost} Cost optimum: near 1.2–1.5 × Rmin.`;
       },
     },
     {
@@ -199,13 +227,13 @@ const MW_INTRO: Lecture = {
       caption: (r, i) => {
         const s = solveAt(i, { mode: 'simple' });
         const a = solveAt(i, { mode: 'advanced' });
-        const counts = `At R = ${plain(i.R)}: Simple N = ${s ? s.N : 'n/a'}, Advanced N = ${a ? a.N : 'n/a'} theoretical stages.`;
-        const top = r.trayProfile?.[0];
-        if (r.mode !== 'advanced' || !top) {
-          return `Advanced mode replaces the constant relative volatility with NRTL ${componentName(r.mixture.light)}–${componentName(r.mixture.heavy)} equilibrium and gives each tray its bubble-point temperature. ${counts}`;
-        }
+        const counts = `Same R = ${plain(i.R)}: Simple N = ${s ? s.N : 'n/a'}, Advanced N = ${a ? a.N : 'n/a'} theoretical stages.`;
         const { light, heavy } = names(r);
-        return `Advanced mode uses NRTL ${light}–${heavy} equilibrium, and each tray temperature is the bubble point of its liquid: ${temp(r, top.T_C)} on tray 1, rising to ${temp(r, r.Tbot_C)} in the reboiler. ${counts} Simple's constant α misses how α changes with composition.`;
+        const profile = r.mode === 'advanced' ? profileSentence(r) : null;
+        if (!profile) {
+          return `Advanced mode replaces the constant relative volatility with NRTL ${light}–${heavy} equilibrium and gives each tray its bubble-point temperature. ${counts}`;
+        }
+        return `Advanced uses NRTL ${light}–${heavy} equilibrium; each tray at its liquid's bubble point. ${profile[0].toUpperCase()}${profile.slice(1)}. ${counts} Constant α ignores α's composition dependence.`;
       },
     },
     {
@@ -214,7 +242,9 @@ const MW_INTRO: Lecture = {
       set: { mode: 'advanced' },
       caption: (r) => {
         const { light, heavy } = names(r);
-        return `Your turn: open Explore and change R, q, the purities or the tray efficiency. The ${light}–${heavy} column (${trays(r)} now) and its McCabe–Thiele diagram update live. Then try another mixture, such as ${pair('benzene-toluene')} or ${pair('ethanol-water')} (Advanced only).`;
+        // Advanced derives q from the feed temperature, which is the input there.
+        const feed = r.mode === 'advanced' ? 'the feed temperature' : 'q';
+        return `Your turn: open Explore and change R, ${feed}, the purities or the tray efficiency. The ${light}–${heavy} column (${trays(r)} now) and its McCabe–Thiele diagram update live. Then try another mixture, such as ${pair('ethanol-water')} (Advanced only) or ${pair('benzene-toluene')}.`;
       },
     },
   ],
