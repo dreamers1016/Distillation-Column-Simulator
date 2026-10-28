@@ -10,12 +10,17 @@ import {
   HEAVY_COLOR,
   LIGHT_COLOR,
   LIQUID_PARTICLES,
+  MAX_LIQUID_PARTICLES,
+  MAX_VAPOUR_PARTICLES,
+  MIN_PARTICLE_PX,
   VAPOUR_PARTICLES,
   compositionAtHeight,
   compositionColor,
   createFlow,
 } from '../../src/scene/flow';
 import { buildPlant } from '../../src/scene/plant';
+import { particleCounts } from '../../src/scene/flow';
+import { PointsMaterial, ShaderLib } from 'three';
 
 const solved = (patch: Partial<Inputs>): Results => {
   const r = solve({ ...defaultInputs(), ...patch });
@@ -214,6 +219,51 @@ describe('createFlow', () => {
     f.update(0.05);
     expect(Array.from(f.liquidS)).not.toEqual(s0);
     expect(mat.opacity).toBe(full);
+    f.dispose();
+  });
+});
+
+describe('particle density on tall columns (item 9)', () => {
+  it('short columns keep 420 / 320; taller ones scale with the drawn trays, capped', () => {
+    expect(particleCounts(6)).toEqual({ liquid: LIQUID_PARTICLES, vapour: VAPOUR_PARTICLES });
+    expect(particleCounts(12)).toEqual({ liquid: 420, vapour: 324 });
+    expect(particleCounts(40)).toEqual({ liquid: 1400, vapour: 1080 });
+    expect(particleCounts(120)).toEqual({ liquid: MAX_LIQUID_PARTICLES, vapour: MAX_VAPOUR_PARTICLES });
+    for (let n = 1; n < 130; n++) {
+      const a = particleCounts(n);
+      const b = particleCounts(n + 1);
+      expect(b.liquid).toBeGreaterThanOrEqual(a.liquid);
+      expect(b.vapour).toBeGreaterThanOrEqual(a.vapour);
+    }
+  });
+
+  it('createFlow on a 120-tray column allocates the scaled counts and still animates', () => {
+    const tall = { ...adv, actualTrays: 150, feedTray: 70 };
+    const plant = plantOf(tall);
+    const f = createFlow(plant, tall);
+    const want = particleCounts(plant.layout.displayTrays);
+    expect(f.points[0].geometry.getAttribute('position').count).toBe(want.liquid);
+    expect(f.points[1].geometry.getAttribute('position').count).toBe(want.vapour);
+    expect(f.liquidS.length).toBe(want.liquid);
+    const before = Array.from(f.vaporY);
+    f.update(0.1);
+    expect(Array.from(f.vaporY)).not.toEqual(before);
+    // a rebuild to a short column (fewer particles) starts fresh instead of reading past the end
+    const g = createFlow(plantOf(adv), adv, f);
+    expect(g.liquidS.length).toBe(LIQUID_PARTICLES);
+    expect(Array.from(g.liquidS).every(Number.isFinite)).toBe(true);
+    f.dispose();
+    g.dispose();
+  });
+
+  it('particles keep a minimum on-screen size (vertex shader floor)', () => {
+    const f = createFlow(plantOf(adv), adv);
+    const m = f.points[0].material as PointsMaterial;
+    const shader = { vertexShader: ShaderLib.points.vertexShader, fragmentShader: '', uniforms: {} };
+    m.onBeforeCompile(shader as never, undefined as never);
+    expect(shader.vertexShader).toContain(`gl_PointSize = max( gl_PointSize, ${MIN_PARTICLE_PX.toFixed(2)} * size /`);
+    // the floor goes after the perspective attenuation, inside the size block
+    expect(shader.vertexShader.indexOf('max( gl_PointSize')).toBeGreaterThan(shader.vertexShader.indexOf('scale / - mvPosition.z'));
     f.dispose();
   });
 });

@@ -143,7 +143,11 @@ export class Presenter {
     markStep(lecture.id, k);
     // The plant was rebuilt synchronously by the store change, so these anchors are current.
     const anchor = this.opts.anchors?.()?.[step.focus];
-    if (anchor) this.director.flyTo(anchor.look, anchor.dist * (step.zoomOut ?? 1), { captionSafe: true });
+    if (anchor) {
+      const zoom = step.zoomOut ?? 1;
+      // A fitted anchor (overview, column) is refitted to the real caption-safe region.
+      this.director.flyTo(anchor.look, anchor.dist * zoom, anchor.box ? { captionSafe: true, fit: { box: anchor.box, scale: zoom } } : { captionSafe: true });
+    }
   }
 
   private readonly onKey = (e: KeyboardEvent) => {

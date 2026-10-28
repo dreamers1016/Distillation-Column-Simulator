@@ -48,8 +48,11 @@ export const HIGHLIGHT_EMISSIVE = 0x1d6b66;
 export const GHOST_OPACITY = 0.5;
 
 /**
- * Width / height of the region anchors are fitted to: Lecture's caption-safe area
- * (right 62 % of 1920 x 1080 = 1.10). The Explore view (1446 x 1080 = 1.34) is wider.
+ * Width / height of the region the stored anchor distances are fitted to: Lecture's
+ * caption-safe area (right 62 % of 1920 x 1080 = 1.10). These distances are only the
+ * fallback: fitted anchors also carry their box, and the CameraDirector refits that box
+ * to the actual visible region (viewport minus the panel, caption, top bar or bottom
+ * sheet; camera.ts fitPose) on every flight.
  */
 export const FRAME_ASPECT = 1.1;
 /** Breathing room around a fitted box. */
@@ -101,6 +104,8 @@ export interface PlantOptions {
 export interface Anchor {
   look: Vector3;
   dist: number;
+  /** The framed object's world box (fitted anchors only): flights refit it to the visible region. */
+  box?: Box3;
 }
 export type AnchorKey = PartRef['kind'] | 'overview';
 
@@ -286,7 +291,7 @@ export function buildPlant(r: Results, opts: PlantOptions): Plant {
   const fitted = (o: Object3D): Anchor => {
     const box = new Box3().setFromObject(o); // pins (CSS2DObject) have no geometry: ignored
     const look = box.getCenter(new Vector3());
-    return { look, dist: fitDistance(box, look) };
+    return { look, dist: fitDistance(box, look), box };
   };
   const anchors: Record<AnchorKey, Anchor> = {
     overview: fitted(group),

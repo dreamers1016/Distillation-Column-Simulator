@@ -2,9 +2,11 @@
 //
 // Two THREE.Points, one per phase, each with a single BufferGeometry whose position and
 // colour attributes are rewritten in place every frame (no per-frame allocation):
-//   - liquid: 420 particles on the arclength-parametrised plant.liquidPath (across a deck,
-//     over the weir, down the downcomer, ...), spread sideways so it reads as a sheet;
-//   - vapour: 320 particles rising through the active area of the vapour box.
+//   - liquid: 420 particles (more on taller columns, see particleCounts) on the
+//     arclength-parametrised plant.liquidPath (across a deck, over the weir, down the
+//     downcomer, ...), spread sideways so it reads as a sheet;
+//   - vapour: 320 particles (likewise scaled) rising through the active area of the vapour box.
+// Particles never shrink below MIN_PARTICLE_PX on screen (overview of a tall column).
 // Speeds are time-based (dt seconds): liquid 0.9 m/s x L/L_ref above the feed tray and
 // 0.9 x L'/L_ref from the feed tray down; vapour 1.4 m/s x V/V_ref above the feed tray and
 // 1.4 x V'/V_ref below it. L_ref and V_ref come from the first solve after a mixture
@@ -26,8 +28,28 @@ import { REFLUX_BELOW_TOP, SUMP_LEVEL, VAPOUR_RETURN_ABOVE_Y0, type ColumnLayout
 import { CHORD_X, TRAY_R } from './geometry/trays';
 import type { Plant } from './plant';
 
+/** Particle counts for a short column (up to 12 drawn trays); taller columns get more, see particleCounts. */
 export const LIQUID_PARTICLES = 420;
 export const VAPOUR_PARTICLES = 320;
+/** Particles per drawn tray on taller columns, and the caps (per-frame cost stays bounded). */
+const LIQUID_PER_TRAY = 35;
+const VAPOUR_PER_TRAY = 27;
+export const MAX_LIQUID_PARTICLES = 3000;
+export const MAX_VAPOUR_PARTICLES = 2400;
+/** Smallest on-screen particle diameter, CSS px (overview of a 120-tray column). */
+export const MIN_PARTICLE_PX = 3.5;
+
+/**
+ * Particle counts for a column with `displayTrays` drawn trays: the short-column counts up
+ * to 12 trays, then proportional to the tray count (the same density per tray), capped.
+ */
+export function particleCounts(displayTrays: number): { liquid: number; vapour: number } {
+  const n = Math.max(0, Math.round(displayTrays));
+  return {
+    liquid: Math.min(MAX_LIQUID_PARTICLES, Math.max(LIQUID_PARTICLES, n * LIQUID_PER_TRAY)),
+    vapour: Math.min(MAX_VAPOUR_PARTICLES, Math.max(VAPOUR_PARTICLES, n * VAPOUR_PER_TRAY)),
+  };
+}
 export const LIGHT_COLOR = '#e2873a';
 export const HEAVY_COLOR = '#2c6fbb';
 /** Base particle speeds, m/s, at the reference flow. */
@@ -179,6 +201,16 @@ function makePoints(count: number): { points: Points; pos: Float32Array; col: Fl
     depthWrite: false,
     toneMapped: false, // keep the legend colours true (no ACES shift)
   });
+  // Keep a minimum on-screen size: the 'size' uniform is PARTICLE_SIZE_M x pixelRatio, so
+  // size / PARTICLE_SIZE_M recovers the pixel ratio and the floor is MIN_PARTICLE_PX CSS px.
+  m.onBeforeCompile = (shader) => {
+    const attenuate = 'if ( isPerspective ) gl_PointSize *= ( scale / - mvPosition.z );';
+    shader.vertexShader = shader.vertexShader.replace(
+      attenuate,
+      `${attenuate}\n\t\tgl_PointSize = max( gl_PointSize, ${MIN_PARTICLE_PX.toFixed(2)} * size / ${PARTICLE_SIZE_M.toFixed(4)} );`,
+    );
+  };
+  m.customProgramCacheKey = () => `flow-min-${MIN_PARTICLE_PX}`;
   const points = new Points(g, m);
   points.frustumCulled = false; // positions change every frame; the bounding sphere is not maintained
   return { points, pos, col };
@@ -202,6 +234,10 @@ export function createFlow(plant: Plant, r: Results, prev?: Flow): Flow {
   };
   const layout = plant.layout;
   const rand = mulberry32(0x5eed + layout.displayTrays);
+  const { liquid: NL, vapour: NV } = particleCounts(layout.displayTrays);
+  // Phases carry over only between equal particle counts (same drawn tray band).
+  const keepL = keep && keep.liquidS.length === NL ? keep : undefined;
+  const keepV = keep && keep.vaporY.length === NV ? keep : undefined;
 
   // ---- colour look-up tables over the column height (composition depends on height only) ----
   const yMin = layout.y0;
@@ -243,13 +279,13 @@ export function createFlow(plant: Plant, r: Results, prev?: Flow): Flow {
     else if (local === 3) [xjStart[p], xjEnd[p]] = [1, 1];
     else if (local === 4) [xjStart[p], xjEnd[p]] = [1, 0];
   }
-  const L = makePoints(LIQUID_PARTICLES);
-  const liquidS = new Float64Array(LIQUID_PARTICLES);
-  const liquidSeg = new Int32Array(LIQUID_PARTICLES);
-  const lz = new Float32Array(LIQUID_PARTICLES);
-  const lx = new Float32Array(LIQUID_PARTICLES);
-  for (let i = 0; i < LIQUID_PARTICLES; i++) {
-    const frac = keep ? keep.liquidS[i] / keep.pathLength : (i + rand()) / LIQUID_PARTICLES;
+  const L = makePoints(NL);
+  const liquidS = new Float64Array(NL);
+  const liquidSeg = new Int32Array(NL);
+  const lz = new Float32Array(NL);
+  const lx = new Float32Array(NL);
+  for (let i = 0; i < NL; i++) {
+    const frac = keepL ? keepL.liquidS[i] / keepL.pathLength : (i + rand()) / NL;
     liquidS[i] = frac * pathLength;
     lz[i] = rand() * 2 - 1;
     lx[i] = rand() * 2 - 1;
@@ -264,12 +300,12 @@ export function createFlow(plant: Plant, r: Results, prev?: Flow): Flow {
   const vaporSpan = box.max.y - box.min.y;
   const feedDeckY = layout.trayY[layout.feedTrayIndex];
   const xHalf = Math.min(box.max.x, CHORD_X - VAPOUR_X_MARGIN);
-  const V = makePoints(VAPOUR_PARTICLES);
-  const vaporY = new Float64Array(VAPOUR_PARTICLES);
-  const vx = new Float32Array(VAPOUR_PARTICLES);
-  const vz = new Float32Array(VAPOUR_PARTICLES);
-  for (let i = 0; i < VAPOUR_PARTICLES; i++) {
-    const frac = keep ? (keep.vaporY[i] - keep.vaporMinY) / keep.vaporSpan : (i + rand()) / VAPOUR_PARTICLES;
+  const V = makePoints(NV);
+  const vaporY = new Float64Array(NV);
+  const vx = new Float32Array(NV);
+  const vz = new Float32Array(NV);
+  for (let i = 0; i < NV; i++) {
+    const frac = keepV ? (keepV.vaporY[i] - keepV.vaporMinY) / keepV.vaporSpan : (i + rand()) / NV;
     vaporY[i] = vaporMinY + clamp01(frac) * vaporSpan;
     vx[i] = (rand() * 2 - 1) * xHalf;
     const zHalf = Math.min(box.max.z, VAPOUR_Z_SPREAD * Math.sqrt(Math.max(0, TRAY_R * TRAY_R - vx[i] * vx[i])));
@@ -285,7 +321,7 @@ export function createFlow(plant: Plant, r: Results, prev?: Flow): Flow {
   const write = () => {
     const lp = L.pos;
     const lc = L.col;
-    for (let i = 0; i < LIQUID_PARTICLES; i++) {
+    for (let i = 0; i < NL; i++) {
       const seg = liquidSeg[i];
       const t = (liquidS[i] - cum[seg]) / segLen[seg];
       const a = P[seg];
@@ -305,7 +341,7 @@ export function createFlow(plant: Plant, r: Results, prev?: Flow): Flow {
     }
     const vp = V.pos;
     const vc = V.col;
-    for (let i = 0; i < VAPOUR_PARTICLES; i++) {
+    for (let i = 0; i < NV; i++) {
       const o = i * 3;
       vp[o] = vx[i];
       vp[o + 1] = vaporY[i];
@@ -341,7 +377,7 @@ export function createFlow(plant: Plant, r: Results, prev?: Flow): Flow {
       if (ghost || !(dt > 0)) return;
       const dAbove = speeds.liquidAbove * dt;
       const dBelow = speeds.liquidBelow * dt;
-      for (let i = 0; i < LIQUID_PARTICLES; i++) {
+      for (let i = 0; i < NL; i++) {
         let seg = liquidSeg[i];
         let s = liquidS[i] + (below[seg] ? dBelow : dAbove);
         if (s >= pathLength) {
@@ -354,7 +390,7 @@ export function createFlow(plant: Plant, r: Results, prev?: Flow): Flow {
       }
       const upAbove = speeds.vaporAbove * dt;
       const upBelow = speeds.vaporBelow * dt;
-      for (let i = 0; i < VAPOUR_PARTICLES; i++) {
+      for (let i = 0; i < NV; i++) {
         let y = vaporY[i];
         y += y > feedDeckY ? upAbove : upBelow;
         if (y > vaporMinY + vaporSpan) y = vaporMinY + ((y - vaporMinY) % vaporSpan);
