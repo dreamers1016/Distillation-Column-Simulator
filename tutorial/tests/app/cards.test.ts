@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // Component cards (spec §6) and the Components page: content rules, rendering, wiring.
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { CARD_CONTENT, CARD_ORDER, type Card, type CardCtx } from '../../src/app/content/components';
 import { renderCard, mountCards } from '../../src/app/ui/cards';
 import { renderComponentsPage, mountComponentsPage } from '../../src/app/ui/componentsPage';
@@ -276,10 +276,14 @@ describe('Components page', () => {
     const unmount = mountComponentsPage(root, store);
     return { root, store, unmount, page: () => root.querySelector<HTMLElement>('.components-page') as HTMLElement };
   };
-  /** Let jsdom run its queued history-traversal tasks (nested zero-delay timeouts). */
-  const settle = async () => {
-    for (let i = 0; i < 20 && window.location.hash !== ''; i++) await new Promise((r) => setTimeout(r, 10));
-  };
+  /** Wait (bounded) for jsdom's queued history traversal to clear the hash. */
+  const settle = () =>
+    vi.waitFor(
+      () => {
+        if (window.location.hash !== '') throw new Error(`hash still ${window.location.hash}`);
+      },
+      { timeout: 2000, interval: 5 },
+    );
 
   it('opens on #components (link) and Back steps back in history instead of pushing', async () => {
     history.replaceState(null, '', '/');
