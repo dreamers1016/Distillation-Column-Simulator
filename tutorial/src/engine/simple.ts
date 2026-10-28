@@ -71,6 +71,8 @@ export function solveSimple(inputs: Inputs, options: SimpleOptions = {}): Result
     ...trays,
     feedStage: st.feedStage,
     stages: st.stages.map((s) => ({ ...s, T_C: null, gamma: null })),
+    xB,
+    yB: curve.yStar(xB),
     trayProfile: null,
     Ttop_C: top.T_K - K0,
     TtopVapour_C: null,

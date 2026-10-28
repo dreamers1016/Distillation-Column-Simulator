@@ -13,11 +13,14 @@
 // Colour = lerp(heavy, light, composition): liquid uses x, vapour uses y, read at the
 // particle's height. Advanced: per-actual-tray trayProfile. Simple (trayProfile null): the
 // theoretical stages are mapped to actual trays with the engine's own formula
-// s = 1 + (k - 0.5)(N - 1)/actualTrays and linear interpolation of x and y in s.
+// s = 1 + (k - 0.5)(N - 1)/actualTrays and linear interpolation of x and y in s (engine/profile.ts),
+// with stage N's node replaced by the reboiler state x = xB, y = y*(xB): the stepped last stage
+// overshoots below xB and the bottom of the column must end at the bottoms composition.
 // Between two drawn decks the composition is linear in height; the ends are anchored at the
 // real stream compositions (reflux / overhead vapour = xD, sump liquid = xB).
 import { BufferAttribute, BufferGeometry, Color, DataTexture, LinearFilter, Points, PointsMaterial, RGBAFormat } from 'three';
 import { COMPONENTS } from '../engine/components';
+import { interpolateTray, profileNodes, type ProfileNode } from '../engine/profile';
 import type { Results } from '../engine/types';
 import { REFLUX_BELOW_TOP, SUMP_LEVEL, VAPOUR_RETURN_ABOVE_Y0, type ColumnLayout } from './geometry/column';
 import { CHORD_X, TRAY_R } from './geometry/trays';
@@ -91,33 +94,31 @@ function trayComposition(r: Results, k: number): { x: number; y: number } {
     const p = prof[Math.min(Math.max(k, 1), prof.length) - 1];
     return { x: p.x, y: p.y };
   }
-  // Simple mode: same tray <-> stage mapping the engine uses for the Advanced profile.
-  const st = r.stages;
-  const N = st.length;
-  if (N < 2) return { x: st[0]?.x ?? 0, y: st[0]?.y ?? 0 };
-  const trays = Math.max(1, Math.round(r.actualTrays));
-  const s = 1 + ((k - 0.5) * (N - 1)) / trays;
-  const j = Math.min(Math.max(Math.floor(s), 1), N - 1); // lower stage, 1-based
-  const t = Math.min(Math.max(s - j, 0), 1);
-  const a = st[j - 1];
-  const b = st[j];
-  return { x: a.x + t * (b.x - a.x), y: a.y + t * (b.y - a.y) };
+  // Simple mode: the engine's own tray <-> stage mapping and interpolation, with stage N's
+  // node replaced by the reboiler state (x = xB, y = y*(xB)) exactly as Advanced does.
+  const p = interpolateTray(reboilerNodes(r), k, r.actualTrays);
+  return { x: p.x, y: p.y };
+}
+
+/** Stages 1...N-1 as stepped plus the reboiler state as stage N (the stepped x_N overshoots below xB). */
+function reboilerNodes(r: Results): ProfileNode[] {
+  return profileNodes(r.stages, { x: r.xB, y: r.yB, T_C: null });
 }
 
 /**
  * Composition (mole fraction of the light component) of the liquid (`'x'`) or vapour (`'y'`)
  * at elevation y. Piecewise linear in height through the drawn decks, with end anchors that
  * are the real stream compositions: reflux enters the top at x = xD (= y of stage 1) and the
- * overhead vapour is y = xD; the sump liquid is x = xB (= x of the last stage) and the
- * reboiler vapour is y of the last stage. Beyond the anchors the value is held.
+ * overhead vapour is y = xD; the sump liquid is x = xB and the
+ * reboiler vapour is y*(xB). Beyond the anchors the value is held.
  */
 export function compositionAtHeight(L: ColumnLayout, r: Results, y: number, which: 'x' | 'y'): number {
   const n = L.displayTrays;
   const st = r.stages;
   const first = st[0];
-  const last = st[st.length - 1];
   const top = which === 'x' ? [L.yTop - REFLUX_BELOW_TOP, first.y] : [L.yTop, first.y];
-  const bottom = which === 'x' ? [L.y0 + SUMP_LEVEL, last.x] : [L.y0 + VAPOUR_RETURN_ABOVE_Y0, last.y];
+  // sump liquid = the bottoms product xB; reboiler vapour = y*(xB) (not the overshooting stepped stage N)
+  const bottom = which === 'x' ? [L.y0 + SUMP_LEVEL, r.xB] : [L.y0 + VAPOUR_RETURN_ABOVE_Y0, r.yB];
   // knot 0 = top anchor, 1..n = drawn trays (top first), n + 1 = bottom anchor
   const kY = (i: number) => (i === 0 ? top[0] : i > n ? bottom[0] : L.trayY[i - 1]);
   const kV = (i: number) => (i === 0 ? top[1] : i > n ? bottom[1] : trayComposition(r, L.trayNo[i - 1])[which]);

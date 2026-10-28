@@ -87,6 +87,10 @@ export interface Results {
   feedStage: number;
   feedTray: number;
   stages: StageRow[];
+  /** Bottoms composition = the partial reboiler's liquid (equilibrium stage N); stages[N-1].x is only the stepped overshoot. */
+  xB: number;
+  /** Reboiler vapour y*(xB) on the mode's own equilibrium curve. */
+  yB: number;
   trayProfile: { tray: number; x: number; y: number; T_C: number }[] | null;
   Ttop_C: number; // bubble T of xD: the condensate / reflux temperature
   TtopVapour_C: number | null; // dew T of the top vapour (y = xD), Advanced only

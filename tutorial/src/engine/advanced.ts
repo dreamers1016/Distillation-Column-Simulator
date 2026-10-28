@@ -12,6 +12,7 @@ import { vleCurve } from './curve';
 import { hL, hV, hVsuperheated, lambdaMix } from './enthalpy';
 import { fenske, nminTotalReflux, rminPinch, stepStages } from './mccabe';
 import { MIXTURES, type MixturePreset } from './mixtures';
+import { interpolateTray, profileNodes } from './profile';
 import type { Inputs, SolveResult, StageRow, Warning } from './types';
 import { selectCondenser, selectReboiler } from './utilities';
 import { bubblePoint, dewPoint, findAzeotrope, VleModelError } from './vle';
@@ -142,22 +143,21 @@ export function solveAdvanced(inputs: Inputs, options: AdvancedOptions = {}): So
     return { ...s, T_C: b.T_K - K0, gamma: b.gamma };
   });
 
-  // Tray profile: actual tray k sits at stage index s = 1 + (k - 0.5)(N - 1)/actualTrays,
-  // linearly interpolated in stage index (the card states it is interpolated).
-  const trayProfile = Array.from({ length: trays.actualTrays }, (_, i) => {
-    const k = i + 1;
-    const s = 1 + ((k - 0.5) * (st.N - 1)) / trays.actualTrays;
-    const j = Math.min(Math.floor(s), st.N - 1); // lower stage, 1-based
-    const t = s - j;
-    const a = stages[j - 1];
-    const b = stages[j];
-    const lerp = (u: number, v: number): number => u + t * (v - u);
-    return { tray: k, x: lerp(a.x, b.x), y: lerp(a.y, b.y), T_C: lerp(a.T_C as number, b.T_C as number) };
-  });
-
   const top = bubblePoint(mix, xD, P); // condensate / reflux temperature
   const topVapour = dewPoint(mix, xD, P); // top vapour (y = xD) at its dew point
   const bot = bubblePoint(mix, xB, P);
+
+  // Tray profile: actual tray k sits at stage index s = 1 + (k - 0.5)(N - 1)/actualTrays,
+  // linearly interpolated in stage index (the card states it is interpolated). Stage N is the
+  // partial reboiler whose liquid is the bottoms product, so for interpolation its node is the
+  // reboiler state (x = xB, y = y*(xB), T = Tbub(xB)), not the overshooting stepped x_N
+  // (see ./profile.ts). `stages` above stays exactly as stepped.
+  const yB = curve.yStar(xB);
+  const nodes = profileNodes(stages, { x: xB, y: yB, T_C: bot.T_K - K0 });
+  const trayProfile = Array.from({ length: trays.actualTrays }, (_, i) => {
+    const p = interpolateTray(nodes, i + 1, trays.actualTrays);
+    return { tray: i + 1, x: p.x, y: p.y, T_C: p.T_C as number };
+  });
 
   // Energy (kJ/kmol x kmol/h = kJ/h; / 3600 -> kW). Total condenser:
   // saturated top vapour -> saturated liquid distillate and reflux.
@@ -215,6 +215,8 @@ export function solveAdvanced(inputs: Inputs, options: AdvancedOptions = {}): So
     ...trays,
     feedStage: st.feedStage,
     stages,
+    xB,
+    yB,
     trayProfile,
     Ttop_C: top.T_K - K0,
     TtopVapour_C: topVapour.T_K - K0,

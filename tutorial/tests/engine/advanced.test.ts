@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { advancedQ, solveAdvanced } from '../../src/engine/advanced';
+import { vleCurve } from '../../src/engine/curve';
 import { MIXTURES, type MixtureId } from '../../src/engine/mixtures';
 import type { Inputs, Results, SolveResult } from '../../src/engine/types';
 
@@ -112,5 +113,50 @@ describe('Advanced solver, other presets', () => {
       const inp = inputs('methanol-water', { feedT_C: T });
       expect(advancedQ(inp)).toBe(ok(solveAdvanced(inp)).q);
     }
+  });
+});
+
+// Task 14b (spec 5.2/5.4): the partial reboiler is equilibrium stage N and its liquid IS the
+// bottoms product, so the tray profile must end at xB (interpolation input only; `stages`
+// stays as stepped so the McCabe-Thiele chart still draws the last step past xB).
+describe('Advanced tray profile ends at the bottoms composition (no overshoot)', () => {
+  const EPS = 1e-9;
+  const cases: [MixtureId, Partial<Inputs>][] = [
+    ['methanol-water', {}],
+    ['ethanol-water', {}],
+    ['benzene-toluene', {}],
+  ];
+  for (const [id, over] of cases) {
+    const r = ok(solveAdvanced(inputs(id, over)));
+    const { xB, xD, P_bar } = inputs(id, over);
+    const prof = r.trayProfile!;
+    const yB = vleCurve(MIXTURES[id], P_bar).yStar(xB);
+
+    it(`${id}: every tray x in [xB, xD] and y in [y*(xB), xD]`, () => {
+      expect(prof).toHaveLength(r.actualTrays);
+      for (const p of prof) {
+        expect(p.x).toBeGreaterThanOrEqual(xB - EPS);
+        expect(p.x).toBeLessThanOrEqual(xD + EPS);
+        expect(p.y).toBeGreaterThanOrEqual(yB - EPS);
+        expect(p.y).toBeLessThanOrEqual(xD + EPS);
+      }
+    });
+    it(`${id}: T non-decreasing down the column and the last tray is not hotter than Tbot`, () => {
+      for (let i = 1; i < prof.length; i++) expect(prof[i].T_C).toBeGreaterThanOrEqual(prof[i - 1].T_C - EPS);
+      expect(prof[prof.length - 1].T_C).toBeLessThanOrEqual(r.Tbot_C + 1e-6);
+    });
+  }
+
+  it('methanol-water: the last tray lies strictly between xB and the liquid of stage N-1', () => {
+    const r = meoh();
+    const last = r.trayProfile![r.trayProfile!.length - 1];
+    expect(last.x).toBeGreaterThan(0.05);
+    expect(last.x).toBeLessThan(r.stages[r.N - 2].x);
+  });
+  it('methanol-water: `stages` is unchanged (last stepped x ≈ 0.0100, past xB) and Tbot is the bubble T of xB', () => {
+    const r = meoh();
+    expect(Math.abs(r.stages[r.N - 1].x - 0.01)).toBeLessThanOrEqual(0.001);
+    expect(r.stages[r.N - 1].x).toBeLessThan(0.05);
+    expect(Math.abs(r.Tbot_C - 92.51)).toBeLessThanOrEqual(0.05);
   });
 });

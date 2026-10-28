@@ -47,6 +47,20 @@ describe('compositionAtHeight', () => {
     });
   }
 
+  it('Simple: the bottom tray deck is not leaner than the bottoms product xB (no overshoot past the reboiler)', () => {
+    const L = plantOf(simple).layout;
+    const yBot = L.trayY[L.displayTrays - 1];
+    expect(compositionAtHeight(L, simple, yBot, 'x')).toBeGreaterThanOrEqual(MW.xB - 1e-9);
+    // the sump anchor is the bottoms product itself (stage N steps to 0.0447 < xB in Simple)
+    expect(compositionAtHeight(L, simple, 0, 'x')).toBeGreaterThanOrEqual(MW.xB - 1e-9);
+    // the whole profile stays inside [xB, xD]
+    for (let k = 0; k < L.displayTrays; k++) {
+      const x = compositionAtHeight(L, simple, L.trayY[k], 'x');
+      expect(x).toBeGreaterThanOrEqual(MW.xB - 1e-9);
+      expect(x).toBeLessThanOrEqual(MW.xD + 1e-9);
+    }
+  });
+
   it('Advanced reads trayProfile exactly at a tray deck, and interpolates between decks', () => {
     const L = plantOf(adv).layout;
     const prof = adv.trayProfile!;
@@ -60,7 +74,7 @@ describe('compositionAtHeight', () => {
   it('is clamped outside the column span and monotone (light at top, heavy at bottom)', () => {
     const L = plantOf(simple).layout;
     const xD = simple.stages[0].y;
-    const xB = simple.stages[simple.stages.length - 1].x;
+    const xB = simple.xB; // the sump is the bottoms product, not the overshooting stepped last stage
     expect(compositionAtHeight(L, simple, L.yTop + 5, 'x')).toBeCloseTo(xD, 9);
     expect(compositionAtHeight(L, simple, 0, 'x')).toBeCloseTo(xB, 9);
     let prev = Infinity;
