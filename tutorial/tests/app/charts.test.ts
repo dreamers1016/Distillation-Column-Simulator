@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach } from 'vitest';
 import { renderMcCabe, MT } from '../../src/app/charts/mccabe';
-import { renderProfile } from '../../src/app/charts/profile';
+import { PF, renderProfile, tickDecimals, trayTicks } from '../../src/app/charts/profile';
+import { CHAR_W, CHART_W, FONT_SIZE } from '../../src/app/charts/svg';
 import { curveFor } from '../../src/app/charts/curveFor';
 import { mountCharts } from '../../src/app/charts/mount';
 import { constantAlphaCurve, vleCurve } from '../../src/engine/curve';
@@ -205,5 +206,70 @@ describe('mountCharts', () => {
     const store = createStore(defaultState());
     mountPanel(document.getElementById('root') as HTMLElement, store, { schedule: (f) => f() });
     expect(document.querySelector('[data-slot="chart"] svg.mt-chart')).not.toBeNull();
+  });
+});
+
+describe('chart legibility', () => {
+  it('chart text is >= 12 px at the narrowest panel (360 px, 15 px scrollbar) and >= 14 px at 1920', () => {
+    const px = (panelW: number) => (FONT_SIZE * (panelW - 32 - 2 - 15)) / CHART_W;
+    expect(px(360)).toBeGreaterThanOrEqual(12);
+    expect(px(Math.min(460, 0.24 * 1920))).toBeGreaterThanOrEqual(14);
+    const { r, inputs } = solved(ethanolAdv());
+    const mt = mk();
+    renderMcCabe(mt, r, curveFor(r, inputs), inputs);
+    const pf = mk();
+    renderProfile(pf, r);
+    const texts = [...mt.querySelectorAll('text'), ...pf.querySelectorAll('text')];
+    expect(texts.length).toBeGreaterThan(20);
+    for (const t of texts) expect(Number(t.getAttribute('font-size'))).toBeGreaterThanOrEqual(FONT_SIZE);
+  });
+
+  it('every legend entry fits inside the viewBox (one column)', () => {
+    for (const patch of [{}, ethanolAdv(), { ...ethanolAdv(), P_bar: 2 }]) {
+      const { r, inputs } = solved(patch);
+      const mt = mk();
+      renderMcCabe(mt, r, curveFor(r, inputs), inputs);
+      const pf = mk();
+      renderProfile(pf, r);
+      const svgs = r.trayProfile ? ([[mt, MT.W, MT.H], [pf, PF.W, PF.H]] as const) : ([[mt, MT.W, MT.H]] as const);
+      for (const [svg, W, H] of svgs) {
+        const legend = Array.from(svg.querySelectorAll('text.mt-legend, text.pf-legend'));
+        expect(legend.length).toBeGreaterThan(0);
+        const xs = new Set(legend.map((t) => t.getAttribute('x')));
+        expect(xs.size).toBe(1);
+        for (const t of legend) {
+          // regular-weight system-ui averages ~0.55 em per character (CHAR_W is the bold estimate)
+          expect(Number(t.getAttribute('x')) + (t.textContent ?? '').length * 0.55 * FONT_SIZE).toBeLessThanOrEqual(W);
+          expect(CHAR_W).toBeGreaterThan(0.55 * FONT_SIZE);
+          expect(Number(t.getAttribute('y'))).toBeLessThanOrEqual(H - 4);
+        }
+      }
+    }
+  });
+
+  it('temperature tick decimals follow the tick step, so labels never repeat', () => {
+    expect([1, 2, 5, 10].map(tickDecimals)).toEqual([0, 0, 0, 0]);
+    expect([0.5, 0.2, 0.1].map(tickDecimals)).toEqual([1, 1, 1]);
+    expect([0.05, 0.02].map(tickDecimals)).toEqual([2, 2]);
+    // a narrow profile (< 4 °C): pin the tray temperatures and check the rendered ticks
+    const { r } = solved(ethanolAdv());
+    const prof = (r.trayProfile as NonNullable<Results['trayProfile']>).map((p, i, a) => ({ ...p, T_C: 80 + (1.7 * i) / (a.length - 1) }));
+    const svg = mk();
+    renderProfile(svg, { ...r, trayProfile: prof });
+    const labels = Array.from(svg.querySelectorAll('text.pf-t-tick')).map((t) => t.textContent);
+    expect(labels.length).toBeGreaterThanOrEqual(3);
+    expect(new Set(labels).size).toBe(labels.length);
+  });
+
+  it('tray ticks keep 1 and the last tray and never crowd (26-29 trays: no 1/2 overlap)', () => {
+    for (let M = 1; M <= 160; M++) {
+      const perTray = M > 1 ? (PF.height - 20) / (M - 1) : Infinity;
+      const gap = (1.15 * FONT_SIZE) / perTray;
+      const t = trayTicks(M, gap);
+      expect(t[0]).toBe(1);
+      if (M > 1 && M - 1 >= gap) expect(t[t.length - 1]).toBe(M);
+      for (let i = 1; i < t.length; i++) expect((t[i] - t[i - 1]) * perTray).toBeGreaterThanOrEqual(1.15 * FONT_SIZE - 1e-9);
+      if (M >= 26 && M <= 29) expect(t).not.toContain(2);
+    }
   });
 });

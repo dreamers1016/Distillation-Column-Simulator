@@ -56,7 +56,17 @@ const SPECS = {
   loss: top('heatLossPct', () => 'Reboiler heat loss', 0, 15, 0.5, (v) => `${fmtNum(v, 1)} %`),
 };
 
-const Q_TICKS = ['superheated', 'sat. vapour', 'two-phase', 'sat. liquid', 'subcooled'];
+/** q-slider ticks: the value and its feed condition, placed at the value's true fraction of the slider range. */
+const Q_TICKS: [number, string][] = [
+  [-0.5, 'superheated'],
+  [0, 'sat. vapour'],
+  [0.5, 'two-phase'],
+  [1, 'sat. liquid'],
+  [1.5, 'subcooled'],
+];
+
+/** Position of `v` along a slider, 0..1 (the CSS adds the thumb inset). */
+export const tickFraction = (v: number, min: number, max: number): number => (v - min) / (max - min);
 
 const UTILITY_NAME: Record<CondenserResult['utility'], string> = {
   CW: 'Cooling water',
@@ -158,7 +168,17 @@ export function mountPanel(root: HTMLElement, store: Store, opts: PanelOptions =
       setMixture(store, picker.value as MixtureId);
     });
 
-    const qTicks = h('div', { class: 'ticks', 'data-ticks': 'q' }, ...Q_TICKS.map((t) => h('span', {}, t)));
+    // Staggered in two rows (alternate ticks drop a row) so neighbouring words never collide.
+    const qTicks = h(
+      'div',
+      { class: 'sl-ticks', 'data-ticks': 'q' },
+      ...Q_TICKS.map(([v, word], j) => {
+        const f = tickFraction(v, SPECS.q.min, SPECS.q.max);
+        const t = h('span', { class: j % 2 ? 'sl-tick low' : 'sl-tick', 'data-value': v }, h('b', {}, fmtNum(v, v % 1 ? 1 : 0)), h('span', {}, word));
+        t.style.setProperty('--f', String(f));
+        return t;
+      }),
+    );
     const feedCondition = advanced
       ? [sliderRow(SPECS.feedT, mix), sliderRow(SPECS.P, mix)]
       : [sliderRow(SPECS.q, mix), qTicks];

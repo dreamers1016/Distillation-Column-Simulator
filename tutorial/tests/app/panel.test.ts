@@ -70,6 +70,16 @@ describe('controls', () => {
     expect(q('input[data-input="P_bar"]')).toBeNull();
   });
 
+  it('places the q ticks at the true fractions of the slider range, with their values', () => {
+    const slider = q<HTMLInputElement>('input[data-input="q"]') as HTMLInputElement;
+    const [min, max] = [Number(slider.min), Number(slider.max)];
+    const ticks = Array.from(root.querySelectorAll<HTMLElement>('[data-ticks="q"] .sl-tick'));
+    expect(ticks.map((t) => Number(t.dataset.value))).toEqual([-0.5, 0, 0.5, 1, 1.5]);
+    expect(ticks.map((t) => Number(t.style.getPropertyValue('--f')))).toEqual([0, 0.25, 0.5, 0.75, 1]);
+    for (const t of ticks) expect(Number(t.style.getPropertyValue('--f'))).toBeCloseTo((Number(t.dataset.value) - min) / (max - min), 12);
+    expect(ticks.map((t) => t.querySelector('b')?.textContent)).toEqual(['-0.5', '0', '0.5', '1', '1.5']);
+  });
+
   it('Advanced shows feed T and pressure and no q slider', () => {
     setMode(store, 'advanced');
     expect(q('input[data-input="q"]')).toBeNull();

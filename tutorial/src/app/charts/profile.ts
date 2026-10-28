@@ -4,9 +4,10 @@
 // The values are the solver's interpolated per-tray profile.
 import type { Results } from '../../engine/types';
 import { componentName, fmtNum, mixtureLabel } from '../format';
-import { FEED, GRID, INK, MUTED, label, niceStep, num, pts, svgEl } from './svg';
+import { CHART_W, FEED, FONT_SIZE, GRID, INK, MUTED, label, niceStep, num, pts, svgEl } from './svg';
 
-export const PF = { W: 520, H: 580, left: 56, right: 22, top: 80, height: 380 } as const;
+const LEGEND_ROW = Math.round(FONT_SIZE * 1.4);
+export const PF = { W: CHART_W, H: 84 + 380 + 96 + 3 * LEGEND_ROW + 14, left: 76, right: 24, top: 84, height: 380 } as const;
 const PLOT_W = PF.W - PF.left - PF.right;
 const PAD = 10; // vertical room above tray 1 and below the last tray
 
@@ -15,6 +16,28 @@ const C_X = '#1d4e89';
 const C_Y = '#0d7c79';
 
 type TrayPoint = NonNullable<Results['trayProfile']>[number];
+
+/** Decimals that make every tick of a `step`-spaced axis distinct: 1 → 0, 0.5 → 1, 0.2 → 1, 0.05 → 2. */
+export function tickDecimals(step: number): number {
+  if (!(step > 0) || step >= 1) return 0;
+  return Math.max(0, Math.ceil(-Math.log10(step) - 1e-9));
+}
+
+/**
+ * Tray-axis ticks for M trays: tray 1, round multiples, and the last tray. A tick closer than
+ * `minGap` (in units of tray index) to the one kept before it is dropped, so labels never
+ * overlap (e.g. trays 1 and 2 at 26-29 trays); the last tray replaces a crowding neighbour.
+ */
+export function trayTicks(M: number, minGap: number): number[] {
+  const step = M <= 12 ? 1 : niceStep(M - 1, 8);
+  const ticks = [1];
+  for (let t = step; t < M; t += step) if (t > 1 && t - ticks[ticks.length - 1] >= minGap) ticks.push(t);
+  if (M > 1) {
+    while (ticks.length > 1 && M - ticks[ticks.length - 1] < minGap) ticks.pop();
+    if (M - ticks[ticks.length - 1] >= minGap) ticks.push(M);
+  }
+  return ticks;
+}
 
 export function renderProfile(svg: SVGSVGElement, r: Results): void {
   const prof = r.trayProfile;
@@ -48,23 +71,24 @@ export function renderProfile(svg: SVGSVGElement, r: Results): void {
 
   const kids: SVGElement[] = [];
 
-  // tray ticks: tray 1, then multiples of a round step, then the last tray
-  const step = M <= 12 ? 1 : niceStep(M - 1, 8);
-  const ticks = [1];
-  for (let t = step; t <= M; t += step) if (t > 1) ticks.push(t);
-  if (ticks[ticks.length - 1] !== M && M - ticks[ticks.length - 1] >= step / 2) ticks.push(M);
-  for (const t of ticks) {
-    kids.push(svgEl('line', { x1: X(0), y1: num(Y(t)), x2: X(1), y2: num(Y(t)), stroke: GRID, 'stroke-width': 1 }));
-    kids.push(label(PF.left - 9, Y(t) + 5, String(t), { anchor: 'end', fill: MUTED }));
+  // tray ticks: tray 1, then multiples of a round step, then the last tray, never closer
+  // than 1.15 text heights on screen
+  const perTray = M > 1 ? (PF.height - 2 * PAD) / (M - 1) : Infinity;
+  for (const t of trayTicks(M, (1.15 * FONT_SIZE) / perTray)) {
+    kids.push(svgEl('line', { class: 'pf-tray-tick', 'data-tray': t, x1: X(0), y1: num(Y(t)), x2: X(1), y2: num(Y(t)), stroke: GRID, 'stroke-width': 1 }));
+    kids.push(label(PF.left - 9, Y(t) + 7, String(t), { anchor: 'end', fill: MUTED }));
   }
-  kids.push(label(18, PF.top + PF.height / 2, 'Tray (1 = top)', { anchor: 'middle', rotate: -90 }));
+  kids.push(label(22, PF.top + PF.height / 2, 'Tray (1 = top)', { anchor: 'middle', rotate: -90 }));
 
-  // bottom axis: temperature
-  for (let T = tLo; T <= tHi + 1e-9; T += tStep) {
+  // bottom axis: temperature, with enough decimals that no two ticks read the same
+  const tDp = tickDecimals(tStep);
+  const nT = Math.round((tHi - tLo) / tStep);
+  for (let k = 0; k <= nT; k++) {
+    const T = tLo + k * tStep; // by index: no accumulated float error
     kids.push(svgEl('line', { x1: num(XT(T)), y1: bottom, x2: num(XT(T)), y2: bottom + 6, stroke: C_T, 'stroke-width': 1.5 }));
-    kids.push(label(XT(T), bottom + 25, fmtNum(T), { anchor: 'middle', fill: C_T }));
+    kids.push(label(XT(T), bottom + 27, fmtNum(T, tDp), { anchor: 'middle', fill: C_T, class: 'pf-t-tick' }));
   }
-  kids.push(label(X(0.5), bottom + 52, 'Temperature, °C', { anchor: 'middle', fill: C_T, weight: 'bold' }));
+  kids.push(label(X(0.5), bottom + 58, 'Temperature, °C', { anchor: 'middle', fill: C_T, weight: 'bold' }));
 
   // top axis: mole fraction
   for (let k = 0; k <= 5; k++) {
@@ -72,7 +96,7 @@ export function renderProfile(svg: SVGSVGElement, r: Results): void {
     kids.push(svgEl('line', { x1: num(X(v)), y1: PF.top - 6, x2: num(X(v)), y2: PF.top, stroke: C_X, 'stroke-width': 1.5 }));
     kids.push(label(X(v), PF.top - 12, k === 0 ? '0' : k === 5 ? '1' : v.toFixed(1), { anchor: 'middle', fill: C_X }));
   }
-  kids.push(label(X(0.5), PF.top - 38, `Mole fraction of ${light}`, { anchor: 'middle', fill: C_X, weight: 'bold' }));
+  kids.push(label(X(0.5), PF.top - 44, `Mole fraction of ${light}`, { anchor: 'middle', fill: C_X, weight: 'bold' }));
 
   kids.push(svgEl('rect', { x: X(0), y: PF.top, width: PLOT_W, height: PF.height, fill: 'none', stroke: INK, 'stroke-width': 1.5 }));
 
@@ -91,20 +115,20 @@ export function renderProfile(svg: SVGSVGElement, r: Results): void {
   series('pf-y', C_Y, (p) => X(p.y), '7 4');
   series('pf-T', C_T, (p) => XT(p.T_C));
 
-  // legend
-  const ly = bottom + 84;
-  const entries: [number, number, string, string, string | undefined][] = [
-    [0, 0, 'Temperature (bottom axis)', C_T, undefined],
-    [0, 1, 'x, liquid (top axis)', C_X, undefined],
-    [1, 0, 'y, vapour (top axis)', C_Y, '7 4'],
-    [1, 1, `Feed tray ${feed}`, FEED, '8 5'],
+  // legend: one column
+  const ly = bottom + 96;
+  const entries: [string, string, string | undefined][] = [
+    ['Temperature (bottom axis)', C_T, undefined],
+    ['x, liquid (top axis)', C_X, undefined],
+    ['y, vapour (top axis)', C_Y, '7 4'],
+    [`Feed tray ${feed}`, FEED, '8 5'],
   ];
-  for (const [col, row, text, stroke, dash] of entries) {
-    const x = PF.left + (col === 0 ? 0 : 252);
-    const y = ly + row * 22;
-    kids.push(svgEl('line', { x1: x, y1: y - 5, x2: x + 26, y2: y - 5, stroke, 'stroke-width': 3, 'stroke-dasharray': dash }));
-    kids.push(label(x + 34, y, text, { class: 'pf-legend' }));
-  }
+  entries.forEach(([text, stroke, dash], row) => {
+    const x = PF.left;
+    const y = ly + row * LEGEND_ROW;
+    kids.push(svgEl('line', { x1: x, y1: y - 7, x2: x + 26, y2: y - 7, stroke, 'stroke-width': 3, 'stroke-dasharray': dash }));
+    kids.push(label(x + 36, y, text, { class: 'pf-legend' }));
+  });
 
   svg.replaceChildren(...kids);
 }

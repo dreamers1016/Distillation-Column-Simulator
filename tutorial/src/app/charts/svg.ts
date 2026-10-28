@@ -8,8 +8,17 @@ export const GRID = '#e5dccb';
 export const CARD = '#fffdf8';
 export const FEED = '#7b4fbf'; // matches the 3D feed pipe
 export const FONT = "system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
-/** Smallest chart text, in viewBox units: 16 units = 12.6 px when the 520-unit chart fills the 411 px panel at 1920 wide. */
-export const FONT_SIZE = 16;
+/**
+ * Chart text size in viewBox units (charts are CHART_W = 520 units wide, drawn at the panel's
+ * content width). Narrowest panel: 360 px - 32 px padding - 2 px border - a 15 px classic
+ * scrollbar = 311 px, so 21 units = 12.6 px; at 1920 wide (460 px panel, 411 px content)
+ * it is 16.6 px. Keep >= 12 px at every supported width (see --panel-w in tokens.css).
+ */
+export const FONT_SIZE = 21;
+/** Width of both charts' viewBox. */
+export const CHART_W = 520;
+/** Rough advance width of one character at FONT_SIZE (bold system-ui), for fit checks. */
+export const CHAR_W = 0.6 * FONT_SIZE;
 
 type Attrs = Record<string, string | number | undefined>;
 type Child = Node | string | null | undefined | false;

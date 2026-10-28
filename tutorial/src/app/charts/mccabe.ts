@@ -6,10 +6,15 @@ import type { EquilibriumCurve } from '../../engine/curve';
 import { qLineIntersection } from '../../engine/mccabe';
 import type { Inputs, Results } from '../../engine/types';
 import { componentName, fmtNum, mixtureLabel } from '../format';
-import { CARD, FEED, GRID, INK, MUTED, label, num, pts, svgEl } from './svg';
+import { CARD, CHART_W, CHAR_W, FEED, FONT_SIZE, GRID, INK, MUTED, label, num, pts, svgEl } from './svg';
 
-/** Plot geometry in viewBox units: a square plot area with room for axis labels. */
-export const MT = { W: 520, H: 590, left: 64, top: 14, size: 440 } as const;
+/** Legend: one entry per row (six rows) below the x-axis title. */
+const LEGEND_ROW = Math.round(FONT_SIZE * 1.4);
+/**
+ * Plot geometry in viewBox units: a square plot area with room for the axis labels
+ * (FONT_SIZE text) on the left and below, and the one-column legend under it.
+ */
+export const MT = { W: CHART_W, H: 14 + 430 + 92 + 5 * LEGEND_ROW + 14, left: 74, top: 14, size: 430 } as const;
 const px = (x: number): number => MT.left + x * MT.size;
 const py = (y: number): number => MT.top + (1 - y) * MT.size;
 
@@ -53,12 +58,12 @@ export function renderMcCabe(svg: SVGSVGElement, r: Results, curve: EquilibriumC
     const t = k === 0 ? '0' : k === 5 ? '1' : v.toFixed(1);
     kids.push(svgEl('line', { x1: num(px(v)), y1: num(py(0)), x2: num(px(v)), y2: num(py(1)), stroke: GRID, 'stroke-width': 1 }));
     kids.push(svgEl('line', { x1: num(px(0)), y1: num(py(v)), x2: num(px(1)), y2: num(py(v)), stroke: GRID, 'stroke-width': 1 }));
-    kids.push(label(px(v), py(0) + 21, t, { anchor: 'middle', fill: MUTED }));
-    kids.push(label(px(0) - 9, py(v) + 5, t, { anchor: 'end', fill: MUTED }));
+    kids.push(label(px(v), py(0) + 25, t, { anchor: 'middle', fill: MUTED }));
+    kids.push(label(px(0) - 9, py(v) + 7, t, { anchor: 'end', fill: MUTED }));
   }
   kids.push(svgEl('rect', { x: px(0), y: py(1), width: MT.size, height: MT.size, fill: 'none', stroke: INK, 'stroke-width': 1.5 }));
-  kids.push(label(px(0.5), py(0) + 50, `x, liquid mole fraction ${light}`, { anchor: 'middle' }));
-  kids.push(label(18, py(0.5), `y, vapour mole fraction ${light}`, { anchor: 'middle', rotate: -90 }));
+  kids.push(label(px(0.5), py(0) + 56, `x, liquid mole fraction ${light}`, { anchor: 'middle' }));
+  kids.push(label(22, py(0.5), `y, vapour mole fraction ${light}`, { anchor: 'middle', rotate: -90 }));
 
   // y = x
   kids.push(svgEl('line', { class: 'mt-diag', x1: num(px(0)), y1: num(py(0)), x2: num(px(1)), y2: num(py(1)), stroke: C_DIAG, 'stroke-width': 1.5, 'stroke-dasharray': '6 4' }));
@@ -103,7 +108,7 @@ export function renderMcCabe(svg: SVGSVGElement, r: Results, curve: EquilibriumC
     );
     if (feed || last || s.n % every === 0) {
       // upper left of the corner on the curve; when the curve hugs the y axis, to its right instead
-      const left = px(s.x) - 5 - 12 >= MT.left;
+      const left = px(s.x) - 5 - CHAR_W >= MT.left;
       labels.push(label(left ? px(s.x) - 5 : px(s.x) + 6, py(s.y) - 6, String(s.n), { anchor: left ? 'end' : 'start', weight: 'bold', fill: feed ? FEED : INK, halo: true, class: 'mt-stage-no' }));
     }
   });
@@ -112,14 +117,14 @@ export function renderMcCabe(svg: SVGSVGElement, r: Results, curve: EquilibriumC
   // xB, xF, xD: a marker on the diagonal with a dotted drop to the x axis. Labels sit
   // just above the axis, where the plot is empty (everything drawn lies on or above
   // y = x); xF takes the second row so it cannot run into a nearby xB.
-  const marks: [string, number, number][] = [['xB', xB, 10], ['xF', xF, 34], ['xD', xD, 10]];
+  const marks: [string, number, number][] = [['xB', xB, 10], ['xF', xF, 10 + Math.round(FONT_SIZE * 1.2)], ['xD', xD, 10]];
   for (const [, v] of marks) {
     kids.push(svgEl('line', { x1: num(px(v)), y1: num(py(v)), x2: num(px(v)), y2: num(py(0)), stroke: MUTED, 'stroke-width': 1.5, 'stroke-dasharray': '2 3' }));
   }
   for (const [id, v, rise] of marks) {
     kids.push(svgEl('circle', { 'data-marker': id, cx: num(px(v)), cy: num(py(v)), r: 5, fill: INK, stroke: CARD, 'stroke-width': 1.5 }));
     const text = `${id} = ${fmtNum(v, id === 'xF' ? 2 : 3)}`;
-    const fitsRight = px(v) + 6 + text.length * 8.6 <= MT.W - 4;
+    const fitsRight = px(v) + 6 + text.length * CHAR_W <= MT.W - 4;
     kids.push(
       fitsRight
         ? label(px(v) + 6, py(0) - rise, text, { weight: 'bold', halo: true })
@@ -127,24 +132,24 @@ export function renderMcCabe(svg: SVGSVGElement, r: Results, curve: EquilibriumC
     );
   }
 
-  // legend below the plot: two columns of three
-  const ly = MT.top + MT.size + 74;
+  // legend below the plot: one column, so long entries never run into a second column
+  const ly = MT.top + MT.size + 92;
   const line = (stroke: string, w: number, dash?: string) => (x: number, y: number) =>
     svgEl('line', { x1: x, y1: y, x2: x + 26, y2: y, stroke, 'stroke-width': w, 'stroke-dasharray': dash });
-  const entries: [0 | 1, number, string, (x: number, y: number) => SVGElement][] = [
-    [0, 0, equilibriumLabel(r, op.P_bar ?? null), line(C_EQ, 3)],
-    [0, 1, 'Theoretical stages', line(INK, 1.6)],
-    [0, 2, `Feed stage ${r.feedStage}`, line(FEED, 3.5)],
-    [1, 0, 'Rectifying line', line(C_RECT, 2.5)],
-    [1, 1, 'Stripping line', line(C_STRIP, 2.5)],
-    [1, 2, `q-line (q = ${fmtNum(r.q, 2)})`, line(C_Q, 2.5, '7 4')],
+  const entries: [string, (x: number, y: number) => SVGElement][] = [
+    [equilibriumLabel(r, op.P_bar ?? null), line(C_EQ, 3)],
+    ['Theoretical stages', line(INK, 1.6)],
+    [`Feed stage ${r.feedStage}`, line(FEED, 3.5)],
+    ['Rectifying line', line(C_RECT, 2.5)],
+    ['Stripping line', line(C_STRIP, 2.5)],
+    [`q-line (q = ${fmtNum(r.q, 2)})`, line(C_Q, 2.5, '7 4')],
   ];
-  for (const [col, row, text, sw] of entries) {
-    const x = MT.left + (col === 0 ? 0 : 296);
-    const y = ly + row * 22;
-    kids.push(sw(x, y - 5));
-    kids.push(label(x + 34, y, text, { class: 'mt-legend' }));
-  }
+  entries.forEach(([text, sw], row) => {
+    const x = MT.left;
+    const y = ly + row * LEGEND_ROW;
+    kids.push(sw(x, y - 7));
+    kids.push(label(x + 36, y, text, { class: 'mt-legend' }));
+  });
 
   svg.replaceChildren(...kids);
 }

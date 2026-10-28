@@ -30,6 +30,17 @@ export function mountTopbar(host: HTMLElement, store: Store): () => void {
   );
   host.append(bar);
 
+  // The bar wraps to more rows at narrow widths: publish its real height as --topbar-h, which
+  // the panel, the dock and the card overlay are positioned from.
+  const root = document.documentElement;
+  const publish = () => {
+    const h = Math.ceil(bar.getBoundingClientRect().height);
+    if (h > 0) root.style.setProperty('--topbar-h', `${h}px`);
+  };
+  const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(publish) : null;
+  ro?.observe(bar);
+  publish();
+
   const press = (b: HTMLButtonElement, on: boolean) => b.setAttribute('aria-pressed', String(on));
   const sync = () => {
     const s = store.get();
@@ -44,6 +55,8 @@ export function mountTopbar(host: HTMLElement, store: Store): () => void {
   const off = store.subscribe(sync);
   return () => {
     off();
+    ro?.disconnect();
+    root.style.removeProperty('--topbar-h');
     bar.remove();
   };
 }
