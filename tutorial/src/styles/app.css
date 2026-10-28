@@ -426,3 +426,13 @@ input:focus-visible {
   height: 5px;
   border-radius: 2px;
 }
+.pipe-legend i.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+.pipe-legend .legend-note {
+  flex-basis: 100%;
+  color: var(--muted, var(--ink));
+  font-size: 11px;
+}
