@@ -15,8 +15,11 @@ import { setMixture, type Store } from '../state';
 import { h } from './dom';
 
 export interface PanelOptions {
-  /** Defer a callback to the next frame. Defaults to requestAnimationFrame; tests pass a synchronous one. */
-  schedule?: (fn: () => void) => void;
+  /**
+   * Defer a callback to the next frame; may return a function that cancels it. Defaults to
+   * requestAnimationFrame (cancelled with cancelAnimationFrame); tests pass a synchronous one.
+   */
+  schedule?: (fn: () => void) => unknown;
 }
 
 type Edit = (i: Inputs) => Inputs;
@@ -81,23 +84,32 @@ const STEAM_NAME: Record<ReboilerResult['level'], string> = {
 };
 
 export function mountPanel(root: HTMLElement, store: Store, opts: PanelOptions = {}): () => void {
-  const schedule = opts.schedule ?? ((fn: () => void) => void requestAnimationFrame(() => fn()));
+  const schedule =
+    opts.schedule ??
+    ((fn: () => void) => {
+      const id = requestAnimationFrame(() => fn());
+      return () => cancelAnimationFrame(id);
+    });
 
   // ---- batched edits -------------------------------------------------------
   let pending: Edit[] = [];
   let scheduled = false;
+  let cancelFlush: (() => void) | null = null;
+  let disposed = false;
   const flush = () => {
     scheduled = false;
-    if (pending.length === 0) return;
+    cancelFlush = null;
+    if (disposed || pending.length === 0) return;
     const edits = pending;
     pending = [];
     store.set((s) => ({ inputs: edits.reduce((i, e) => e(i), s.inputs) }));
   };
   const queue = (edit: Edit) => {
     pending.push(edit);
-    if (!scheduled) {
+    if (!scheduled && !disposed) {
       scheduled = true;
-      schedule(flush);
+      const cancel = schedule(flush);
+      cancelFlush = typeof cancel === 'function' ? (cancel as () => void) : null;
     }
   };
 
@@ -264,11 +276,17 @@ export function mountPanel(root: HTMLElement, store: Store, opts: PanelOptions =
 
   const renderResults = (inputs: Inputs, result: SolveResult) => {
     const shown: Results | null = result.ok ? result : store.lastOk();
+    // Greyed stale results describe the inputs that produced them, not the current (invalid) ones.
+    const shownInputs: Inputs = result.ok ? inputs : (store.lastOkInputs() ?? inputs);
+    const elsewhere =
+      !result.ok && shown && (shown.mixture.id !== inputs.mixtureId || shown.mode !== inputs.mode)
+        ? ` Showing the last valid result for ${mixtureLabel(shown.mixture.id)} (${shown.mode === 'simple' ? 'Simple' : 'Advanced'}).`
+        : '';
 
     banner.replaceChildren(
       ...(result.ok
         ? []
-        : [h('div', { class: 'banner err', role: 'alert' }, h('b', {}, 'Cannot solve this case. '), result.error.message)]),
+        : [h('div', { class: 'banner err', role: 'alert' }, h('b', {}, 'Cannot solve this case. '), result.error.message, elsewhere)]),
     );
 
     warnings.replaceChildren(
@@ -293,7 +311,7 @@ export function mountPanel(root: HTMLElement, store: Store, opts: PanelOptions =
     grid.replaceChildren(
       cell('N', 'Theoretical stages N', String(shown.N), 'including the reboiler'),
       cell('theoreticalTrays', 'Theoretical trays', String(shown.theoreticalTrays)),
-      cell('actualTrays', 'Actual trays', String(shown.actualTrays), `at E_o = ${fmtNum(inputs.Eo, 2)}`),
+      cell('actualTrays', 'Actual trays', String(shown.actualTrays), `at E_o = ${fmtNum(shownInputs.Eo, 2)}`),
       cell('feedTray', 'Feed tray', String(shown.feedTray), 'counted from the top'),
       cell('Rmin', 'Minimum reflux Rmin', fmtNum(shown.Rmin, 2), `R/Rmin = ${fmtNum(Rshown / shown.Rmin, 2)}`),
       cell('Nmin', 'Nmin (total reflux)', fmtNum(shown.Nmin, 1)),
@@ -360,6 +378,12 @@ export function mountPanel(root: HTMLElement, store: Store, opts: PanelOptions =
   const off = store.subscribe((s, r) => update(s.inputs, r));
 
   return () => {
+    // A slider edit may be waiting for the next frame: drop it, so no store update (and no
+    // solve) runs after the panel is gone.
+    disposed = true;
+    cancelFlush?.();
+    cancelFlush = null;
+    pending = [];
     off();
     offCharts();
     panel.remove();

@@ -31,6 +31,8 @@ export interface Store {
   result(): SolveResult;
   /** Most recent successful result, kept for greying out while a later solve fails. */
   lastOk(): Results | null;
+  /** The inputs that produced lastOk() (purities, E_o and pressure are inputs, not in Results). */
+  lastOkInputs(): Inputs | null;
   set(patch: StatePatch): void;
   subscribe(fn: (s: AppState, r: SolveResult) => void): () => void;
   /** Show a transient message; the toast UI listens with onToast. */
@@ -70,6 +72,7 @@ export function createStore(initial: AppState = defaultState(), solver: Solver =
   let solvedFor = state.inputs;
   let result = solver(solvedFor);
   let lastOk: Results | null = result.ok ? result : null;
+  let lastOkInputs: Inputs | null = result.ok ? solvedFor : null;
   const subs = new Set<(s: AppState, r: SolveResult) => void>();
   const toasts = new Set<(m: string) => void>();
 
@@ -77,12 +80,16 @@ export function createStore(initial: AppState = defaultState(), solver: Solver =
     get: () => state,
     result: () => result,
     lastOk: () => lastOk,
+    lastOkInputs: () => lastOkInputs,
     set(patch) {
       state = { ...state, ...(typeof patch === 'function' ? patch(state) : patch) };
       if (state.inputs !== solvedFor) {
         solvedFor = state.inputs;
         result = solver(solvedFor);
-        if (result.ok) lastOk = result;
+        if (result.ok) {
+          lastOk = result;
+          lastOkInputs = solvedFor;
+        }
       }
       for (const fn of [...subs]) fn(state, result);
     },

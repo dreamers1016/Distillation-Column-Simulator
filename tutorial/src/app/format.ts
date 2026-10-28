@@ -8,8 +8,12 @@ const grouped = (dp: number) =>
   new Intl.NumberFormat('en-US', { minimumFractionDigits: dp, maximumFractionDigits: dp, useGrouping: true });
 const FMT = [grouped(0), grouped(1), grouped(2), grouped(3)];
 
-/** Plain number to `dp` decimals (0..3) with thousands separators. */
+/**
+ * Plain number to `dp` decimals (0..3) with thousands separators. A value that rounds to
+ * zero at that precision (a tiny negative, or -0) prints as "0", never "-0" or "-0.00".
+ */
 export function fmtNum(v: number, dp = 0): string {
+  if (Math.abs(v) < 0.5 * 10 ** -dp) v = 0; // also turns -0 into +0
   return (FMT[dp] ?? grouped(dp)).format(v);
 }
 

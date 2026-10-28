@@ -126,6 +126,53 @@ describe('controls', () => {
     expect(store.get().inputs.xD).toBe(0.9);
   });
 
+  it('disposing the panel cancels a pending frame flush: no store update afterwards', () => {
+    const frames: Array<() => void> = [];
+    let cancelled = 0;
+    document.body.innerHTML = '<div id="root"></div>';
+    root = document.getElementById('root') as HTMLElement;
+    store = createStore({ ...defaultState(), view: 'explore' });
+    const unmount = mountPanel(root, store, {
+      schedule: (f) => {
+        frames.push(f);
+        return () => void cancelled++;
+      },
+    });
+    const R0 = store.get().inputs.R;
+    drag('R', 4);
+    expect(frames.length).toBe(1);
+    unmount();
+    expect(cancelled).toBe(1);
+    frames.forEach((f) => f()); // even if the frame fires anyway, nothing is applied
+    expect(store.get().inputs.R).toBe(R0);
+    expect(root.querySelector('.panel')).toBeNull();
+  });
+
+  it('the default scheduler is requestAnimationFrame and the disposer cancels it', () => {
+    const raf = globalThis.requestAnimationFrame;
+    const caf = globalThis.cancelAnimationFrame;
+    const queued = new Map<number, FrameRequestCallback>();
+    let next = 1;
+    globalThis.requestAnimationFrame = (cb) => {
+      queued.set(next, cb);
+      return next++;
+    };
+    globalThis.cancelAnimationFrame = (id) => void queued.delete(id);
+    try {
+      document.body.innerHTML = '<div id="root"></div>';
+      root = document.getElementById('root') as HTMLElement;
+      store = createStore({ ...defaultState(), view: 'explore' });
+      const unmount = mountPanel(root, store);
+      drag('R', 4);
+      expect(queued.size).toBe(1);
+      unmount();
+      expect(queued.size).toBe(0);
+    } finally {
+      globalThis.requestAnimationFrame = raf;
+      globalThis.cancelAnimationFrame = caf;
+    }
+  });
+
   it('utility overrides and coolant temperatures write to the store', () => {
     const cond = q<HTMLSelectElement>('select[data-input="condenserUtility"]') as HTMLSelectElement;
     cond.value = 'ChW';
@@ -184,6 +231,30 @@ describe('results', () => {
     drag('R', 3);
     expect(q('[role="alert"]')).toBeNull();
     expect(grid.classList.contains('stale')).toBe(false);
+  });
+
+  it('greyed stale results label E_o from the inputs that produced them, not the invalid ones', () => {
+    drag('Eo', 0.5);
+    expect(text('[data-result="actualTrays"]')).toContain('at E_o = 0.50');
+    // one edit makes the case invalid and changes E_o at the same time
+    store.set((s) => ({ inputs: { ...s.inputs, R: 0.4, Eo: 0.9 } }));
+    expect(store.result().ok).toBe(false);
+    expect(text('[data-result="actualTrays"]')).toContain('at E_o = 0.50');
+    expect(text('[data-result="actualTrays"]')).not.toContain('0.90');
+  });
+
+  it('the error banner names the stale result when its mixture or mode differs from the selection', () => {
+    expect(store.result().ok).toBe(true);
+    const banner = () => text('[role="alert"]');
+    drag('R', 0.4); // same mixture and mode: no extra sentence
+    expect(banner()).not.toContain('Showing the last valid result');
+    drag('R', 2.5);
+    setMode(store, 'advanced');
+    setMixture(store, 'ethanol-water');
+    expect(store.result().ok).toBe(true);
+    store.set((s) => ({ inputs: { ...s.inputs, mixtureId: 'methanol-water', mode: 'simple', R: 0.3, xD: 0.995 } }));
+    expect(store.result().ok).toBe(false);
+    expect(banner()).toContain('Showing the last valid result for Ethanol–Water (Advanced).');
   });
 
   it('shows the Simple vs Advanced stage-count row only in Advanced for Simple-capable mixtures', () => {
