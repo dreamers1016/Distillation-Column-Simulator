@@ -50,7 +50,9 @@ export interface ColumnLayout {
   capped: boolean;
   /** Deck elevation of each drawn tray, tray 1 (top) first; strictly decreasing. */
   trayY: number[];
-  /** Index into trayY of the feed tray. */
+  /** True tray number (1 = top) of each drawn tray; i + 1 unless the column is capped. */
+  trayNo: number[];
+  /** Index into trayY / trayNo of the feed tray; trayNo[feedTrayIndex] = feedTray. */
   feedTrayIndex: number;
   /** Bottom tangent line (top of the skirt). */
   y0: number;
@@ -64,10 +66,26 @@ export function layoutColumn(r: Pick<Results, 'actualTrays' | 'feedTray'>): Colu
   const capped = trays > MAX_DISPLAY_TRAYS;
   const y0 = COLUMN.skirtHeight;
   const trayY = Array.from({ length: displayTrays }, (_, i) => y0 + COLUMN.sump + (displayTrays - 1 - i) * COLUMN.traySpacing);
-  const feedIdx = Math.min(Math.max(1, Math.round(r.feedTray)), trays) - 1;
-  // A shortened column keeps the feed at the same fraction of the height.
-  const feedTrayIndex = capped ? Math.round((feedIdx * (displayTrays - 1)) / Math.max(1, trays - 1)) : feedIdx;
-  return { trays, displayTrays, capped, trayY, feedTrayIndex, y0, yTop: trayY[0] + COLUMN.topSpace };
+  const feed = Math.min(Math.max(1, Math.round(r.feedTray)), trays);
+  const yTop = trayY[0] + COLUMN.topSpace;
+  if (!capped) {
+    const trayNo = trayY.map((_, i) => i + 1);
+    return { trays, displayTrays, capped, trayY, trayNo, feedTrayIndex: feed - 1, y0, yTop };
+  }
+  // A shortened column keeps the feed at the same fraction of the height. The index is
+  // clamped so that both segments below map at least one true tray per drawn tray.
+  const D = displayTrays;
+  const lo = Math.max(feed > 1 ? 1 : 0, D - 1 - (trays - feed));
+  const hi = Math.min(feed - 1, D - 1 - (feed < trays ? 1 : 0));
+  const fi = Math.min(hi, Math.max(lo, Math.round(((feed - 1) * (D - 1)) / (trays - 1))));
+  // Piecewise-linear numbering through (0 -> 1), (fi -> feed), (D-1 -> trays). Both slopes
+  // are >= 1, so the rounded numbers strictly increase and the feed tray maps exactly.
+  const trayNo = trayY.map((_, i) =>
+    i <= fi
+      ? Math.round(1 + (fi === 0 ? 0 : (i * (feed - 1)) / fi))
+      : Math.round(feed + ((i - fi) * (trays - feed)) / (D - 1 - fi)),
+  );
+  return { trays, displayTrays, capped, trayY, trayNo, feedTrayIndex: fi, y0, yTop };
 }
 
 export interface BuildCtx {
@@ -158,8 +176,12 @@ export function buildColumn(ctx: BuildCtx, L: ColumnLayout): ColumnBuild {
     nozzle(nzMs, 0.24, nzLen, v3(0, headTop - 0.05, 0), v3(0, 1, 0)), // overhead vapour
     nozzle(nzMs, 0.16, nzLen, v3(0, headBottom + 0.05, 0), v3(0, -1, 0)), // bottoms
     nozzle(nzMs, 0.12, 0.4, v3(R - 0.02, refluxY, 0), v3(1, 0, 0)), // reflux inlet
-    nozzle(nzMs, 0.2, 0.4, v3(R - 0.02, vapRetY, 0), v3(1, 0, 0)), // reboiler vapour return
   );
+  // Reboiler vapour return on the back (-z): the downcomer gaps are at |x| > 0.59, so the
+  // inlet never blows into the bottom tray's downcomer, whichever side that is on.
+  const vapNozzle = nozzle(nzMs, 0.2, 0.4, v3(0, vapRetY, -(R - 0.02)), v3(0, 0, -1));
+  vapNozzle.name = 'vapourReturnNozzle';
+  nozzles.add(vapNozzle);
   const tapDir = v3(Math.cos(TAP_ANGLE), 0, Math.sin(TAP_ANGLE));
   for (let t = Math.min(2, L.displayTrays - 1); t < L.displayTrays; t += TAP_EVERY_TRAYS) {
     // pressure / temperature taps midway between trays
@@ -233,7 +255,7 @@ export function buildColumn(ctx: BuildCtx, L: ColumnLayout): ColumnBuild {
       overhead: v3(0, headTop - 0.05 + nzLen + 0.035, 0),
       bottoms: v3(0, headBottom + 0.05 - nzLen - 0.035, 0),
       reflux: v3(R - 0.02 + 0.4 + 0.035, refluxY, 0),
-      vapourReturn: v3(R - 0.02 + 0.4 + 0.035, vapRetY, 0),
+      vapourReturn: v3(0, vapRetY, -(R - 0.02 + 0.4 + 0.035)),
     },
     manwayY,
     platformY,

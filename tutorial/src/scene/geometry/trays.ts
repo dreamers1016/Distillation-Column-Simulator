@@ -22,7 +22,7 @@ export const APRON_CLEARANCE = 0.05;
 const HOLE_R = 0.034;
 const HOLE_PITCH = 0.12;
 
-/** Sign of x on which tray n's downcomer sits. */
+/** Sign of x on which drawn tray n (1 = top) has its downcomer; n is the true number unless capped. */
 export const downcomerSide = (n: number): 1 | -1 => (n % 2 ? 1 : -1);
 
 /**
@@ -63,17 +63,18 @@ export function buildTrays(ctx: BuildCtx, L: ColumnLayout): Group {
   const n = L.displayTrays;
   const apronH = COLUMN.traySpacing - APRON_CLEARANCE;
   for (let i = 0; i < n; i++) {
-    const trayNo = i + 1;
-    const part = { kind: 'tray' as const, tray: trayNo };
+    const displayNo = i + 1; // sides alternate between drawn trays, also when capped
+    const part = { kind: 'tray' as const, tray: L.trayNo[i] };
     const ms = ctx.mats(part);
     // Tint runs from cool (top, condensing end) to warm (bottom, reboiler end).
     const tint = STEEL.clone().lerp(COLD.clone().lerp(HOT, n > 1 ? i / (n - 1) : 0), 0.45);
     const deckMat = ms.tinted('deck', tint, i === L.feedTrayIndex ? FEED_TRAY_EMISSIVE : 0);
     const g = tag(new Group(), part);
     g.position.y = L.trayY[i];
+    g.userData.displayIndex = i;
 
     const side = new Group();
-    side.rotation.y = downcomerSide(trayNo) > 0 ? 0 : Math.PI;
+    side.rotation.y = downcomerSide(displayNo) > 0 ? 0 : Math.PI;
     const deck = new Mesh(deckGeometry(), deckMat);
     deck.userData.sub = 'deck';
     const weir = box(0.012, WEIR_H, CHORD_LEN, ms.tinted('weir', tint));

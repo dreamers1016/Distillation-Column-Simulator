@@ -18,6 +18,7 @@ import {
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
+import { CAMERA_FOV_DEG } from './camera';
 
 export const BACKGROUND = '#f4ecdc';
 export const FLOOR_SIZE_M = 120;
@@ -58,7 +59,7 @@ export function createScene(container: HTMLElement): SceneHandle {
   pmrem.dispose();
   roomEnv.dispose();
 
-  const camera = new PerspectiveCamera(36, 1, 0.1, 300);
+  const camera = new PerspectiveCamera(CAMERA_FOV_DEG, 1, 0.1, 300);
   camera.position.set(18, 14, 26);
 
   const controls = new OrbitControls(camera, renderer.domElement);

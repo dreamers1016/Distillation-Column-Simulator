@@ -35,7 +35,8 @@ import {
   steamLabel,
   type LegendEntry,
 } from './geometry/piping';
-import { buildTrays, liquidPath } from './geometry/trays';
+import { buildTrays, downcomerSide, liquidPath } from './geometry/trays';
+import { CAMERA_FOV_DEG, VIEW_DIRECTION } from './camera';
 import { makeLabel } from './labels';
 
 export { layoutColumn, MAX_DISPLAY_TRAYS, type ColumnLayout } from './geometry/column';
@@ -45,6 +46,37 @@ export { PIPE_COLORS, type LegendEntry } from './geometry/piping';
 export const HIGHLIGHT_EMISSIVE = 0x1d6b66;
 /** Opacity factor while the current result is ok:false (Review Focus #1). */
 export const GHOST_OPACITY = 0.5;
+
+/**
+ * Width / height of the region anchors are fitted to: Lecture's caption-safe area
+ * (right 62 % of 1920 x 1080 = 1.10). The Explore view (1446 x 1080 = 1.34) is wider.
+ */
+export const FRAME_ASPECT = 1.1;
+/** Breathing room around a fitted box. */
+const FRAME_MARGIN = 1.1;
+
+/**
+ * Camera distance along VIEW_DIRECTION from `look` at which every corner of `box` lies
+ * inside the view frustum (fov CAMERA_FOV_DEG, aspect FRAME_ASPECT), with a margin.
+ * Per corner, in camera axes (right r, up u, toward-camera d): the corner at depth
+ * dist - z must satisfy |y| <= (dist - z) tan(fov/2) and |x| <= (dist - z) tan(fov/2) aspect.
+ */
+export function fitDistance(box: Box3, look: Vector3, fovDeg = CAMERA_FOV_DEG, aspect = FRAME_ASPECT): number {
+  const t = Math.tan((fovDeg * Math.PI) / 360);
+  const d = VIEW_DIRECTION;
+  const r = new Vector3(0, 1, 0).cross(d).normalize();
+  const u = new Vector3().crossVectors(d, r);
+  const v = new Vector3();
+  let dist = 0;
+  for (const x of [box.min.x, box.max.x])
+    for (const y of [box.min.y, box.max.y])
+      for (const z of [box.min.z, box.max.z]) {
+        v.set(x, y, z).sub(look);
+        const depth = v.dot(d);
+        dist = Math.max(dist, depth + (FRAME_MARGIN * Math.abs(v.dot(u))) / t, depth + (FRAME_MARGIN * Math.abs(v.dot(r))) / (t * aspect));
+      }
+  return dist;
+}
 
 /** Equipment placement (see the header comment). */
 export const LAYOUT = {
@@ -146,7 +178,7 @@ export function buildPlant(r: Results, opts: PlantOptions): Plant {
   const col = buildColumn(ctx, L);
   group.add(col.group, buildTrays(ctx, L));
   const fY = L.trayY[L.feedTrayIndex] + FEED_ABOVE_TRAY;
-  const feed = buildFeed(ctx, fY);
+  const feed = buildFeed(ctx, fY, (-downcomerSide(L.feedTrayIndex + 1)) as 1 | -1);
   group.add(feed.group);
 
   // ---- structure, condenser, drum, reboiler ----
@@ -240,12 +272,17 @@ export function buildPlant(r: Results, opts: PlantOptions): Plant {
   // ---- camera anchors ----
   const R = COLUMN.radius;
   const refluxY = L.yTop - REFLUX_BELOW_TOP;
-  const plantTop = cY + 1.6;
   const midTray = L.trayY[Math.floor((L.displayTrays - 1) / 2)];
   const a = (x: number, y: number, z: number, dist: number): Anchor => ({ look: v3(x, y, z), dist });
+  /** Anchor at the centre of an object's bounding box, at the distance that frames all of it. */
+  const fitted = (o: Object3D): Anchor => {
+    const box = new Box3().setFromObject(o); // pins (CSS2DObject) have no geometry: ignored
+    const look = box.getCenter(new Vector3());
+    return { look, dist: fitDistance(box, look) };
+  };
   const anchors: Record<AnchorKey, Anchor> = {
-    overview: a(1.6, plantTop * 0.46, 0, Math.max(30, plantTop * 1.6)),
-    column: a(0, (L.y0 + L.yTop) / 2, 0, Math.max(9, L.yTop * 1.15)),
+    overview: fitted(group),
+    column: fitted(col.group),
     tray: a(0, midTray, 0, 5),
     feed: a(-1.2, fY, 0, 7),
     condenser: a(sx - 0.4, (cY + dY) / 2, 0, 10),

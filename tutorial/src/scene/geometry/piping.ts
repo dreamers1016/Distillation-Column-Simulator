@@ -3,6 +3,7 @@
 import { Group, Mesh, TorusGeometry, Vector3 } from 'three';
 import type { CondenserResult, ReboilerResult } from '../../engine/utilities';
 import { COLUMN, type BuildCtx } from './column';
+import { CHORD_X } from './trays';
 import { box, cyl, nozzle, orient, pipe, shared, tag, v3, type PartMaterials } from './helpers';
 
 export const PIPE_COLORS = {
@@ -124,14 +125,9 @@ export function buildProcessPiping(misc: PartMaterials, p: ProcessPorts): Proces
   // Sump liquid down through the skirt to the reboiler.
   const lowRun = 0.3;
   g.add(pipe([p.columnBottoms, v3(p.columnBottoms.x, lowRun, 0), v3(p.rebLiquidIn.x, lowRun, 0), p.rebLiquidIn], liq, 0.1));
-  // Reboiler vapour back to the column below the bottom tray.
-  g.add(
-    pipe(
-      [p.rebVapourOut, v3(p.rebVapourOut.x, p.columnVapourReturn.y, 0), p.columnVapourReturn],
-      vap,
-      0.15,
-    ),
-  );
+  // Reboiler vapour back to the column below the bottom tray (nozzle on the back, -z).
+  const vr = p.columnVapourReturn;
+  g.add(pipe([p.rebVapourOut, v3(p.rebVapourOut.x, vr.y, 0), v3(p.rebVapourOut.x, vr.y, vr.z), vr], vap, 0.15));
   // Bottoms product from the overflow compartment, under the structure, to battery limit.
   const bottomsEnd = v3(p.rebBottomsOut.x + 4.8, 0.2, 0);
   g.add(pipe([p.rebBottomsOut, v3(p.rebBottomsOut.x, 0.2, 0), bottomsEnd], liq, 0.08));
@@ -141,16 +137,28 @@ export function buildProcessPiping(misc: PartMaterials, p: ProcessPorts): Proces
 
 // ---------------------------------------------------------------------------------
 
-/** Feed: nozzle, internal feed pipe across the feed tray, external line with a control valve. */
-export function buildFeed(ctx: BuildCtx, fY: number): { group: Group; labelAt: Vector3 } {
+/**
+ * Feed: nozzle on -x, internal feed pipe, external line with a control valve. The feed
+ * lands on the feed tray's inlet area (the side opposite its downcomer):
+ * - inlet on -x, the nozzle side (odd drawn tray): a short stub ending in the gap between
+ *   the shell and the downcomer apron of the tray above, i.e. a downcomer feed (tray 1 has
+ *   no tray above, so the stub ends over its inlet area);
+ * - inlet on +x (even drawn tray): a pipe across the active area that ends short of the
+ *   apron of the tray above, which hangs over that inlet area.
+ * Either way the pipe clears every apron, weir and deck.
+ */
+export function buildFeed(ctx: BuildCtx, fY: number, inletSide: 1 | -1): { group: Group; labelAt: Vector3 } {
   const ms = ctx.mats({ kind: 'feed' });
   const g = tag(new Group(), { kind: 'feed' });
   const R = COLUMN.radius;
   const nzLen = 0.45;
   g.add(nozzle(ms, 0.15, nzLen, v3(-R + 0.02, fY, 0), v3(-1, 0, 0)));
-  const internal = cyl(0.06, 0.06, 1.2, ms.get('steel'), { seg: 12 });
+  const x0 = -(R - COLUMN.wall);
+  const x1 = inletSide < 0 ? -(CHORD_X + 0.1) : CHORD_X - 0.15;
+  const internal = cyl(0.06, 0.06, x1 - x0, ms.get('steel'), { seg: 12 });
+  internal.name = 'feedPipe';
   internal.rotation.z = Math.PI / 2;
-  internal.position.set(-R + 0.6, fY, 0);
+  internal.position.set((x0 + x1) / 2, fY, 0);
   g.add(internal);
   const flangeX = -R + 0.02 - nzLen - 0.035;
   const riserX = -6;

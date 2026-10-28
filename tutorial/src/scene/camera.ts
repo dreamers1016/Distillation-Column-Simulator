@@ -8,8 +8,11 @@ export const FLIGHT_TIME_CONSTANT_S = 0.35;
 /** Lecture caption occupies the left 38 %, so the framed object sits in the right 62 %. */
 export const CAPTION_SAFE_LEFT_FRACTION = 0.38;
 
-/** Direction from the look target to the camera for every flight (normalised on use). */
-const VIEW_DIRECTION = new Vector3(0.5, 0.32, 0.9).normalize();
+/** Vertical field of view of the scene camera, degrees (anchors are fitted to it). */
+export const CAMERA_FOV_DEG = 36;
+
+/** Direction from the look target to the camera for every flight (unit vector). */
+export const VIEW_DIRECTION = new Vector3(0.5, 0.32, 0.9).normalize();
 
 /** Flight ends (and snaps) once pose and target are this close to the goal, in metres. */
 const SETTLE_EPSILON = 0.01;
@@ -44,6 +47,18 @@ export function framingOffset(
   const objectPx = (left + right) / 2; // where the object should appear, in px from the left
   const worldPerPx = (2 * distance * Math.tan((fovDeg * Math.PI) / 360)) / viewportH; // vertical FOV
   return -(objectPx - viewportW / 2) * worldPerPx;
+}
+
+/**
+ * Width in px of the Explore panel's cover over the right edge of the stage, for
+ * FramingOptions.rightInsetPx: from the panel's left edge to the viewport edge (panel
+ * width + its right margin). A panel spanning more than half the viewport is a bottom
+ * sheet (narrow layout), and a hidden panel has a 0 x 0 rect: neither covers the right edge.
+ */
+export function rightInsetFor(rect: { left: number; width: number }, viewportW: number): number {
+  if (!(rect.width > 0) || !(viewportW > 0)) return 0;
+  const covered = viewportW - rect.left;
+  return covered > viewportW / 2 ? 0 : Math.max(0, covered);
 }
 
 /** Camera-right unit vector for a camera looking along -dir (dir points target -> camera), world up +Y. */

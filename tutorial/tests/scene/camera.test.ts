@@ -6,6 +6,7 @@ import {
   CAPTION_SAFE_LEFT_FRACTION,
   FLIGHT_TIME_CONSTANT_S,
   framingOffset,
+  rightInsetFor,
   smoothFactor,
   type FlightControls,
 } from '../../src/scene/camera';
@@ -198,5 +199,19 @@ describe('picking helpers', () => {
     expect(resolvePart(mesh)).toEqual({ kind: 'tray', tray: 4 });
     expect(resolvePart(root)).toEqual({ kind: 'column' });
     expect(resolvePart(new Object3D())).toBeNull();
+  });
+});
+
+describe('rightInsetFor (Explore panel covering the right edge)', () => {
+  it('side panel: covered width from its left edge to the viewport edge', () => {
+    // 460 px panel with a 14 px right margin on a 1920 px viewport
+    expect(rightInsetFor({ left: 1446, width: 460 }, 1920)).toBe(474);
+  });
+  it('bottom sheet (<= 900 px layout: full width) covers no right edge: 0', () => {
+    expect(rightInsetFor({ left: 0, width: 900 }, 900)).toBe(0);
+    expect(rightInsetFor({ left: 0, width: 375 }, 375)).toBe(0);
+  });
+  it('hidden panel (Lecture view, 0 × 0 rect): 0', () => {
+    expect(rightInsetFor({ left: 0, width: 0 }, 1920)).toBe(0);
   });
 });

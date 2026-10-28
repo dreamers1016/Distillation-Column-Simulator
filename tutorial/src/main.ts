@@ -5,7 +5,7 @@ import { mountPanel } from './app/ui/panel';
 import { mountToast } from './app/ui/toast';
 import { mountTopbar } from './app/ui/topbar';
 import type { Results } from './engine/types';
-import { CameraDirector } from './scene/camera';
+import { CameraDirector, rightInsetFor } from './scene/camera';
 import { Picker } from './scene/picking';
 import { buildPlant, disposePlantResources, type LegendEntry, type Plant } from './scene/plant';
 import { createScene } from './scene/scene';
@@ -50,12 +50,10 @@ const renderLegend = (entries: LegendEntry[]) => {
   );
 };
 
-/** Width of UI covering the right edge of the stage (the Explore panel), px. */
+/** Width of the Explore panel's cover over the right edge of the stage, px (0 for a bottom sheet). */
 const rightInset = () => {
   const panel = document.querySelector<HTMLElement>('.panel');
-  // getBoundingClientRect is 0 × 0 when the panel is display:none (Lecture view).
-  const w = panel ? panel.getBoundingClientRect().width : 0;
-  return w > 0 ? w + 14 : 0;
+  return panel ? rightInsetFor(panel.getBoundingClientRect(), stageEl.clientWidth || window.innerWidth) : 0;
 };
 
 let plant: Plant | null = null;

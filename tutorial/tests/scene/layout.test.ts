@@ -2,13 +2,15 @@
 // Plant layout and topology, built without a renderer (Three.js objects only).
 // jsdom is needed because the pins (CSS2DObject) create <div>s.
 import { describe, expect, it } from 'vitest';
-import { Box3, CylinderGeometry, Mesh, MeshStandardMaterial, Object3D, Vector3 } from 'three';
+import { Box3, CylinderGeometry, Mesh, MeshStandardMaterial, Object3D, PerspectiveCamera, Quaternion, Vector3 } from 'three';
 import { CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import { defaultInputs } from '../../src/app/state';
 import type { PartRef } from '../../src/app/state';
 import { solve } from '../../src/engine/solve';
 import type { Results } from '../../src/engine/types';
-import { buildPlant, layoutColumn, HIGHLIGHT_EMISSIVE, type PlantOptions } from '../../src/scene/plant';
+import { CAMERA_FOV_DEG, VIEW_DIRECTION } from '../../src/scene/camera';
+import { FEED_TRAY_EMISSIVE } from '../../src/scene/geometry/trays';
+import { buildPlant, layoutColumn, FRAME_ASPECT, HIGHLIGHT_EMISSIVE, type PlantOptions } from '../../src/scene/plant';
 
 const inputs = defaultInputs();
 const solved = solve(inputs);
@@ -86,9 +88,10 @@ describe('buildPlant topology', () => {
       const p = buildPlant(withTrays(n, Math.ceil(n / 2)), opts());
       const trays = partsOf(p.group, 'tray');
       expect(trays).toHaveLength(shown);
-      expect(new Set(trays.map((t) => (t.userData.part as PartRef).tray))).toEqual(
-        new Set(Array.from({ length: shown }, (_, i) => i + 1)),
-      );
+      const nums = trays.map((t) => (t.userData.part as PartRef).tray as number);
+      expect(new Set(nums).size).toBe(shown);
+      expect(Math.min(...nums)).toBe(1);
+      expect(Math.max(...nums)).toBe(n); // true tray numbers, also when capped
       p.dispose();
     }
   });
@@ -156,6 +159,105 @@ describe('buildPlant topology', () => {
       expect(p.anchors[k], k).toBeDefined();
       expect(p.anchors[k].dist).toBeGreaterThan(0);
     }
+    p.dispose();
+  });
+});
+
+/** Every tray-internal mesh (deck, support ring, weir, downcomer apron) with its world Box3. */
+function internals(root: Object3D): { sub: string; tray: number; box: Box3 }[] {
+  root.updateMatrixWorld(true);
+  const out: { sub: string; tray: number; box: Box3 }[] = [];
+  for (const t of partsOf(root, 'tray')) {
+    t.traverse((c) => {
+      if ((c as Mesh).isMesh && c.userData.sub) {
+        out.push({ sub: c.userData.sub as string, tray: (t.userData.part as PartRef).tray as number, box: new Box3().setFromObject(c) });
+      }
+    });
+  }
+  return out;
+}
+
+describe('feed and vapour-return routing clear the tray internals', () => {
+  it.each([5, 6, 1, 15])('internal feed pipe intersects no deck, weir or apron (feed tray %i of 15)', (feedTray) => {
+    const p = buildPlant(withTrays(15, feedTray), opts());
+    const pipeMesh = p.group.getObjectByName('feedPipe') as Mesh;
+    expect(pipeMesh).toBeDefined();
+    p.group.updateMatrixWorld(true);
+    const pipeBox = new Box3().setFromObject(pipeMesh);
+    const hits = internals(p.group).filter((i) => i.box.intersectsBox(pipeBox));
+    expect(hits.map((h) => `${h.sub}@${h.tray}`)).toEqual([]);
+    p.dispose();
+  });
+
+  it.each([15, 14, 1])('vapour-return inlet (and a 0.4 m jet inward) misses every apron (%i trays)', (n) => {
+    const p = buildPlant(withTrays(n, 1), opts());
+    const nz = p.group.getObjectByName('vapourReturnNozzle') as Object3D;
+    expect(nz).toBeDefined();
+    p.group.updateMatrixWorld(true);
+    const box = new Box3().setFromObject(nz);
+    const inward = new Vector3(0, 1, 0).applyQuaternion(nz.getWorldQuaternion(new Quaternion())).multiplyScalar(-0.4);
+    const jet = box.clone().union(box.clone().translate(inward));
+    const hits = internals(p.group).filter((i) => i.sub === 'downcomer' && i.box.intersectsBox(jet));
+    expect(hits.map((h) => h.tray)).toEqual([]);
+    p.dispose();
+  });
+});
+
+describe('capped column numbering (183 actual trays shown as 120)', () => {
+  const r = withTrays(183, 90);
+
+  it('tray groups carry true tray numbers 1..183, strictly increasing down the column', () => {
+    const L = layoutColumn(r);
+    expect(L.trayNo).toHaveLength(120);
+    expect(L.trayNo[0]).toBe(1);
+    expect(L.trayNo[119]).toBe(183);
+    for (let i = 1; i < 120; i++) expect(L.trayNo[i]).toBeGreaterThan(L.trayNo[i - 1]);
+    expect(L.trayNo[L.feedTrayIndex]).toBe(90);
+  });
+
+  it('the glowing feed tray is tray 90, matching the "Feed → tray 90" pin', () => {
+    const p = buildPlant(r, opts());
+    const glowing = partsOf(p.group, 'tray').filter((t) => {
+      const deck = findSub(t, 'deck') as Mesh;
+      return (deck.material as MeshStandardMaterial).emissive.getHex() === FEED_TRAY_EMISSIVE;
+    });
+    expect(glowing.map((t) => (t.userData.part as PartRef).tray)).toEqual([90]);
+    expect(labels(p.group)).toContain('Feed → tray 90');
+    p.highlight({ kind: 'tray', tray: 90 });
+    const deck = findSub(glowing[0], 'deck') as Mesh;
+    expect((deck.material as MeshStandardMaterial).emissive.getHex()).toBe(HIGHLIGHT_EMISSIVE);
+    p.dispose();
+  });
+});
+
+describe('camera anchors frame what they name (fov-based distance)', () => {
+  /** True when every corner of `box` projects inside the viewport of a camera at the anchor. */
+  function framed(look: Vector3, dist: number, box: Box3): boolean {
+    const cam = new PerspectiveCamera(CAMERA_FOV_DEG, FRAME_ASPECT, 0.1, 1000);
+    cam.position.copy(look).addScaledVector(VIEW_DIRECTION, dist);
+    cam.lookAt(look);
+    cam.updateMatrixWorld(true);
+    for (const x of [box.min.x, box.max.x])
+      for (const y of [box.min.y, box.max.y])
+        for (const z of [box.min.z, box.max.z]) {
+          const ndc = new Vector3(x, y, z).project(cam);
+          if (Math.abs(ndc.x) > 1 || Math.abs(ndc.y) > 1) return false;
+        }
+    return true;
+  }
+
+  it.each([
+    [6, 3],
+    [183, 90],
+  ])('overview contains the whole plant and column anchor contains the column (%i trays)', (n, f) => {
+    const p = buildPlant(withTrays(n, f), opts());
+    p.group.updateMatrixWorld(true);
+    const o = p.anchors.overview;
+    expect(framed(o.look, o.dist, new Box3().setFromObject(p.group))).toBe(true);
+    const colBox = new Box3();
+    for (const k of ['column', 'skirt'] as const) for (const g of partsOf(p.group, k)) colBox.expandByObject(g);
+    const c = p.anchors.column;
+    expect(framed(c.look, c.dist, colBox)).toBe(true);
     p.dispose();
   });
 });
