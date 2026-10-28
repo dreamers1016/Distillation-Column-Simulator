@@ -13,9 +13,11 @@ function countingStore() {
 }
 
 describe('store', () => {
-  it('defaults to Explore, Simple, methanol-water with the preset defaults', () => {
+  it('defaults to Lecture (mw-intro, step 1), Simple, methanol-water with the preset defaults', () => {
     const s = defaultState();
-    expect(s.view).toBe('explore');
+    expect(s.view).toBe('lecture');
+    expect(s.lectureId).toBe('mw-intro');
+    expect(s.step).toBe(0);
     expect(s.cutaway).toBe(true);
     expect(s.selected).toBeNull();
     expect(s.inputs.mode).toBe('simple');

@@ -14,7 +14,7 @@ const now = (fn: () => void) => fn();
 beforeEach(() => {
   document.body.innerHTML = '<div id="root"></div>';
   root = document.getElementById('root') as HTMLElement;
-  store = createStore(defaultState());
+  store = createStore({ ...defaultState(), view: 'explore' }); // the app opens in Lecture; these test Explore
   mountPanel(root, store, { schedule: now });
 });
 
@@ -104,7 +104,7 @@ describe('controls', () => {
     const frames: Array<() => void> = [];
     document.body.innerHTML = '<div id="root"></div>';
     root = document.getElementById('root') as HTMLElement;
-    store = createStore(defaultState());
+    store = createStore({ ...defaultState(), view: 'explore' }); // the app opens in Lecture; these test Explore
     mountPanel(root, store, { schedule: (f) => frames.push(f) });
     drag('R', 3);
     drag('R', 4);
@@ -222,6 +222,12 @@ describe('topbar and toast', () => {
     btn('Cutaway').click();
     expect(store.get().cutaway).toBe(false);
     expect(btn('Explore').getAttribute('aria-pressed')).toBe('true');
+    expect(btn('Lecture').disabled).toBe(false);
+    btn('Lecture').click();
+    expect(store.get().view).toBe('lecture');
+    expect(btn('Lecture').getAttribute('aria-pressed')).toBe('true');
+    btn('Explore').click();
+    expect(store.get().view).toBe('explore');
     expect(bar.querySelector('a[href*="components"]')).not.toBeNull();
   });
 

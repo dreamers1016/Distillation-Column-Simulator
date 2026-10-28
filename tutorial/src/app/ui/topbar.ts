@@ -9,8 +9,7 @@ export function mountTopbar(host: HTMLElement, store: Store): () => void {
     return b;
   };
 
-  // Lecture mode arrives in a later task; the switch is shown but disabled until then.
-  const lecture = btn('Lecture', () => store.set({ view: 'lecture' }), { disabled: true, title: 'Lecture mode is coming soon' });
+  const lecture = btn('Lecture', () => store.set({ view: 'lecture' }));
   const explore = btn('Explore', () => store.set({ view: 'explore' }));
   const simple = btn('Simple', () => setMode(store, 'simple'));
   const advanced = btn('Advanced', () => setMode(store, 'advanced'));

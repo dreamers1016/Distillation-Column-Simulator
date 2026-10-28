@@ -12,15 +12,38 @@ import {
 } from '../../src/scene/camera';
 import { isClick, resolvePart } from '../../src/scene/picking';
 
-/** Minimal OrbitControls stand-in: a target plus a 'start' (user drag) event. */
-function fakeControls() {
-  const listeners = new Set<() => void>();
-  const controls: FlightControls = {
-    target: new Vector3(),
-    addEventListener: (_t, fn) => void listeners.add(fn),
-    removeEventListener: (_t, fn) => void listeners.delete(fn),
+/** Minimal event target counting its listeners (the controls' canvas). */
+class FakeDom {
+  private readonly map = new Map<string, Set<(e: Event) => void>>();
+  addEventListener(type: string, fn: (e: Event) => void) {
+    if (!this.map.has(type)) this.map.set(type, new Set());
+    this.map.get(type)?.add(fn);
+  }
+  removeEventListener(type: string, fn: (e: Event) => void) {
+    this.map.get(type)?.delete(fn);
+  }
+  emit(type: string, props: Record<string, number> = {}) {
+    const e = Object.assign(new Event(type), { pointerId: 1, button: 0, clientX: 0, clientY: 0, ...props });
+    this.map.get(type)?.forEach((fn) => fn(e));
+  }
+  count() {
+    let n = 0;
+    this.map.forEach((s) => (n += s.size));
+    return n;
+  }
+}
+
+/** Minimal OrbitControls stand-in: target, distance limits and the canvas the user drags on. */
+function fakeControls(minDistance = 2, maxDistance = 90) {
+  const dom = new FakeDom();
+  const controls: FlightControls = { target: new Vector3(), minDistance, maxDistance, domElement: dom };
+  /** A press, a move of `px` pixels and a release. */
+  const drag = (px = 40) => {
+    dom.emit('pointerdown', { clientX: 100, clientY: 100 });
+    dom.emit('pointermove', { clientX: 100 + px, clientY: 100 });
+    dom.emit('pointerup', { clientX: 100 + px, clientY: 100 });
   };
-  return { controls, drag: () => listeners.forEach((fn) => fn()), listenerCount: () => listeners.size };
+  return { controls, dom, drag, listenerCount: () => dom.count() };
 }
 
 function simulate(seconds: number, hz: number, step: (dt: number) => void) {
@@ -108,13 +131,13 @@ describe('framingOffset', () => {
 });
 
 describe('CameraDirector', () => {
-  const make = () => {
+  const make = (minDistance = 2, maxDistance = 90) => {
     const camera = new PerspectiveCamera(36, 16 / 9, 0.1, 300);
     camera.position.set(18, 14, 26);
-    const { controls, drag, listenerCount } = fakeControls();
+    const { controls, dom, drag, listenerCount } = fakeControls(minDistance, maxDistance);
     controls.target.set(0, 7, 0);
     const director = new CameraDirector(camera, controls, () => ({ width: 1920, height: 1080 }));
-    return { camera, controls, director, drag, listenerCount };
+    return { camera, controls, dom, director, drag, listenerCount };
   };
 
   it('converges on the goal at the requested distance within 3 s', () => {
@@ -174,9 +197,42 @@ describe('CameraDirector', () => {
     expect(controls.target.equals(frozenT)).toBe(true);
   });
 
-  it('dispose detaches the drag listener', () => {
+  it('a bare click (press and release without moving) does not cancel the flight', () => {
+    const { dom, director } = make();
+    director.flyTo(new Vector3(0, 30, 0), 6);
+    simulate(0.2, 60, (dt) => director.update(dt));
+    dom.emit('pointerdown', { clientX: 300, clientY: 300 });
+    dom.emit('pointermove', { clientX: 303, clientY: 302 }); // under 5 px: still a click
+    dom.emit('pointerup', { clientX: 303, clientY: 302 });
+    expect(director.flying).toBe(true);
+    simulate(4, 60, (dt) => director.update(dt));
+    expect(director.flying).toBe(false); // and it still settles
+  });
+
+  it('moving without a pressed pointer (hover) does not cancel; a wheel zoom does', () => {
+    const { dom, director } = make();
+    director.flyTo(new Vector3(0, 30, 0), 6);
+    dom.emit('pointermove', { clientX: 10, clientY: 10 });
+    dom.emit('pointermove', { clientX: 400, clientY: 400 });
+    expect(director.flying).toBe(true);
+    dom.emit('wheel');
+    expect(director.flying).toBe(false);
+  });
+
+  it('clamps the flight distance to the controls limits, so the flight settles', () => {
+    for (const [want, got] of [[200, 40], [0.5, 3]] as const) {
+      const { camera, controls, director } = make(3, 40);
+      const target = new Vector3(0, 10, 0);
+      director.flyTo(target, want);
+      simulate(5, 60, (dt) => director.update(dt));
+      expect(director.flying).toBe(false);
+      expect(camera.position.distanceTo(controls.target)).toBeCloseTo(got, 2);
+    }
+  });
+
+  it('dispose detaches the canvas listeners', () => {
     const { director, listenerCount } = make();
-    expect(listenerCount()).toBe(1);
+    expect(listenerCount()).toBeGreaterThan(0);
     director.dispose();
     expect(listenerCount()).toBe(0);
   });

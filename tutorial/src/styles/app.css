@@ -662,3 +662,184 @@ input:focus-visible {
   background: var(--paper);
   color: var(--muted);
 }
+
+/* ---- Lecture dock: lesson strip, caption card, presenter bar (spec §3.2, §3.4) ----
+   Fixed to the left. In Lecture view it stays inside the left 38 % of the viewport,
+   which caption-safe camera framing keeps clear of the column. */
+.dock {
+  position: fixed;
+  left: 20px;
+  top: calc(var(--topbar-h) + 12px);
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(400px, calc(100vw - 40px));
+  pointer-events: none;
+}
+.dock > * {
+  pointer-events: auto;
+}
+body[data-view='lecture'] .dock {
+  width: min(680px, calc(38vw - 40px));
+}
+.dock .lessons {
+  order: -1;
+}
+
+.lessons {
+  padding: 10px 14px;
+  font-size: 14px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+body[data-view='lecture'] .lessons {
+  font-size: 16px;
+}
+.lessons h2 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+}
+.lessons ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.lessons button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 8px;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 8px;
+}
+.lessons button:hover,
+.lessons button[aria-current] {
+  border-color: var(--teal);
+}
+.lesson-title {
+  flex: 1;
+  font-weight: 600;
+}
+.ticks {
+  display: inline-flex;
+  gap: 3px;
+}
+.tick {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  background: var(--line);
+}
+.tick.done {
+  background: var(--teal);
+}
+.lesson-count {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.lessons-cards {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.8em;
+  color: var(--muted);
+}
+
+/* Caption card: body >= 19 px at 1080p (21 px; 22 px on wide projectors). */
+.caption {
+  padding: 20px 24px 22px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-left: 6px solid var(--teal);
+  border-radius: var(--radius);
+  box-shadow: 0 6px 24px #0002;
+}
+.caption h2 {
+  margin: 0 0 10px;
+  font-size: 19px;
+  line-height: 1.25;
+}
+.caption-body {
+  margin: 0;
+  font-size: 21px;
+  line-height: 1.45;
+}
+@media (min-width: 1700px) {
+  .caption-body {
+    font-size: 22px;
+  }
+}
+
+/* Presenter bar: Prev · step dots · Next (>= 16 px). */
+.presenter {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  font-size: 17px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.caption[hidden],
+.presenter[hidden] {
+  display: none;
+}
+.pres-btn {
+  min-height: 44px;
+  padding: 8px 18px;
+  font: 600 17px/1 var(--font);
+  color: var(--ink);
+  cursor: pointer;
+  background: #fff;
+  border: 1px solid var(--control-line);
+  border-radius: 8px;
+}
+.pres-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.pres-next {
+  color: #fff;
+  background: var(--teal);
+  border-color: var(--teal);
+}
+.step-dots {
+  display: flex;
+  flex: 1;
+  justify-content: center;
+  gap: 10px;
+}
+.step-dot {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  cursor: pointer;
+  background: #fff;
+  border: 2px solid var(--control-line);
+  border-radius: 50%;
+}
+.step-dot.done {
+  background: #bfe6e4;
+  border-color: var(--teal);
+}
+.step-dot[aria-current] {
+  background: var(--teal);
+  border-color: var(--teal);
+  transform: scale(1.25);
+}
+.pres-btn:focus-visible,
+.step-dot:focus-visible,
+.lessons button:focus-visible {
+  outline: 3px solid var(--teal);
+  outline-offset: 2px;
+}

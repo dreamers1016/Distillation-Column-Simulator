@@ -61,7 +61,8 @@ export function defaultInputs(): Inputs {
 }
 
 export function defaultState(): AppState {
-  return { view: 'explore', inputs: defaultInputs(), cutaway: true, selected: null, lectureId: '', step: 0 };
+  // The link opens straight onto the 3D column in Lecture mode, at step 1 of the v1 lesson.
+  return { view: 'lecture', inputs: defaultInputs(), cutaway: true, selected: null, lectureId: 'mw-intro', step: 0 };
 }
 
 export function createStore(initial: AppState = defaultState(), solver: Solver = solve): Store {

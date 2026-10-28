@@ -1,5 +1,8 @@
 import './styles/tokens.css';
 import './styles/app.css';
+import { mountLessons } from './app/lecture/lessons';
+import { Presenter } from './app/lecture/presenter';
+import { trackCardViews } from './app/progress';
 import { createStore, type PartRef } from './app/state';
 import { mountCards } from './app/ui/cards';
 import { mountComponentsPage } from './app/ui/componentsPage';
@@ -110,7 +113,7 @@ const syncPlant = () => {
     if (!framed) {
       framed = true;
       const o = plant.anchors.overview;
-      director.flyTo(o.look, o.dist, { rightInsetPx: rightInset() });
+      director.flyTo(o.look, o.dist, s.view === 'lecture' ? { captionSafe: true } : { rightInsetPx: rightInset() });
     }
   }
   if (!plant) return;
@@ -130,7 +133,33 @@ const syncViewClass = () => {
 syncViewClass();
 store.subscribe(syncViewClass);
 
+// ---- Lecture mode: caption + presenter bar, lesson strip, progress ----
+// One left-hand dock: lesson strip, then (Lecture view) the caption card and presenter bar.
+// In Lecture it stays inside the left 38 % that caption-safe camera framing keeps clear.
+const dock = document.createElement('div');
+dock.className = 'dock';
+app.append(dock);
+const presenter = new Presenter(store, director, { root: dock, anchors: () => plant?.anchors ?? null });
+const unmountLessons = mountLessons(dock, store, presenter);
+const untrackCards = trackCardViews(store);
+if (store.get().view === 'lecture') presenter.go(store.get().step);
+
+// Leaving Lecture: frame the whole plant beside the Explore panel (Lecture re-applies its step itself).
+let lastView = store.get().view;
+store.subscribe((s) => {
+  if (s.view === lastView) return;
+  lastView = s.view;
+  if (s.view === 'explore' && plant) {
+    const o = plant.anchors.overview;
+    director.flyTo(o.look, o.dist, { rightInsetPx: rightInset() });
+  }
+});
+
 import.meta.hot?.dispose(() => {
+  presenter.dispose();
+  unmountLessons();
+  untrackCards();
+  dock.remove();
   plant?.dispose();
   flow?.dispose();
   disposePlantResources();

@@ -319,7 +319,7 @@ describe('mountCards', () => {
   beforeEach(() => {
     document.body.innerHTML = '<div id="root"></div>';
     root = document.getElementById('root') as HTMLElement;
-    store = createStore(defaultState());
+    store = createStore({ ...defaultState(), view: 'explore' });
     mountPanel(root, store, { schedule: (fn) => fn() });
     mountCards(root, store);
   });

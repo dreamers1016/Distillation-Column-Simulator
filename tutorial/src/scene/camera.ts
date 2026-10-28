@@ -1,6 +1,7 @@
 // Camera flights: exponential smoothing toward a goal pose, driven by dt (seconds),
 // so a flight takes the same wall-clock time at 15 Hz as at 144 Hz.
 import { PerspectiveCamera, Vector3 } from 'three';
+import { isClick } from './picking';
 
 /** Time constant of the flight: the remaining distance shrinks by 1/e every 0.35 s. */
 export const FLIGHT_TIME_CONSTANT_S = 0.35;
@@ -66,19 +67,50 @@ export function cameraRight(dir: Vector3): Vector3 {
   return new Vector3(0, 1, 0).cross(dir).normalize();
 }
 
+/** Event source the user drags and wheels on (the controls' canvas). */
+export interface DragSurface {
+  addEventListener(type: string, listener: (e: Event) => void): void;
+  removeEventListener(type: string, listener: (e: Event) => void): void;
+}
+
 /** The part of OrbitControls the director needs (also satisfied by a test double). */
 export interface FlightControls {
   target: Vector3;
-  addEventListener(type: 'start', listener: () => void): void;
-  removeEventListener(type: 'start', listener: () => void): void;
+  /** Orbit distance limits: OrbitControls clamps to them every frame, so flights must too. */
+  minDistance: number;
+  maxDistance: number;
+  domElement?: DragSurface | null;
 }
+
+const POINTER_EVENTS = ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'wheel'] as const;
 
 export class CameraDirector {
   private goalPos = new Vector3();
   private goalTarget = new Vector3();
   private active = false;
-  private readonly cancel = () => {
-    this.active = false;
+  /** Pressed pointers and where they went down (CSS px). */
+  private readonly down = new Map<number, [number, number]>();
+  private readonly dom: DragSurface | null;
+
+  /**
+   * A real drag (a pressed pointer moving as far as the picker's click limit) or a wheel
+   * zoom cancels the flight. A bare press, such as clicking a part or a label while the
+   * camera is flying, does not.
+   */
+  private readonly onPointer = (ev: Event) => {
+    const e = ev as PointerEvent;
+    if (e.type === 'wheel') {
+      this.active = false;
+      return;
+    }
+    if (e.type === 'pointerdown') {
+      this.down.set(e.pointerId, [e.clientX, e.clientY]);
+    } else if (e.type === 'pointermove') {
+      const at = this.down.get(e.pointerId);
+      if (at && !isClick(at, [e.clientX, e.clientY])) this.active = false;
+    } else {
+      this.down.delete(e.pointerId);
+    }
   };
 
   constructor(
@@ -86,14 +118,18 @@ export class CameraDirector {
     private readonly controls: FlightControls,
     private readonly getViewport: () => { width: number; height: number },
   ) {
-    controls.addEventListener('start', this.cancel); // any user drag/zoom/pan cancels the flight
+    this.dom = controls.domElement ?? null;
+    for (const t of POINTER_EVENTS) this.dom?.addEventListener(t, this.onPointer);
   }
 
   get flying(): boolean {
     return this.active;
   }
 
+  /** Fly to look at `target` from `distance` (clamped to the controls' distance limits). */
   flyTo(target: Vector3, distance: number, opts: FramingOptions = {}): void {
+    const { minDistance, maxDistance } = this.controls;
+    distance = Math.min(Math.max(distance, minDistance), maxDistance);
     const { width, height } = this.getViewport();
     const shift = framingOffset(width, height, this.camera.fov, distance, opts);
     this.goalTarget.copy(target).addScaledVector(cameraRight(VIEW_DIRECTION), shift);
@@ -120,6 +156,7 @@ export class CameraDirector {
 
   dispose(): void {
     this.active = false;
-    this.controls.removeEventListener('start', this.cancel);
+    for (const t of POINTER_EVENTS) this.dom?.removeEventListener(t, this.onPointer);
+    this.down.clear();
   }
 }

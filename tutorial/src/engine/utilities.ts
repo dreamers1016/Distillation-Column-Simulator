@@ -13,9 +13,9 @@ import type { Inputs } from './types';
 /** Liquid water cp, kJ/(kg K): standard value near 25 °C (NIST Chemistry WebBook, water). */
 const CP_WATER_KJKGK = 4.18;
 /** Minimum approach at the condenser coolant outlet, °C (spec 5.6; common design practice, Sinnott & Towler, Chemical Engineering Design). */
-const DT_MIN_CONDENSER_C = 10;
+export const DT_MIN_CONDENSER_C = 10;
 /** Minimum steam-to-process temperature difference at the reboiler, °C (spec 5.6; Sinnott & Towler guidance for steam heating). */
-const DT_MIN_REBOILER_C = 20;
+export const DT_MIN_REBOILER_C = 20;
 /** Overall U for organic condensers against water, W/(m² K): design value inside the typical range in Sinnott & Towler (Chemical Engineering Design, typical overall coefficients table). */
 const U_CONDENSER_WM2K = 800;
 /** Overall U for steam reboilers on light organics/aqueous liquids, W/(m² K): design value inside the typical range in Sinnott & Towler. */
