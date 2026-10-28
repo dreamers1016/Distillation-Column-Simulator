@@ -1,6 +1,6 @@
 // Components page (spec §6): every component card, in order, for revision. It is an
 // in-app view: a full-screen scrollable overlay opened by the top bar's Components
-// link (#components) and closed with Back, browser Back or Escape. Cards use the
+// link (#components) and closed with Back, browser Back or Escape (topmost layer first). Cards use the
 // current (last valid) results, so the live values match the 3D model.
 import { CARD_CONTENT, CARD_ORDER, type CardCtx } from '../content/components';
 import { mixtureLabel } from '../format';
@@ -8,6 +8,7 @@ import type { Inputs, Results } from '../../engine/types';
 import type { Store } from '../state';
 import { renderCard } from './cards';
 import { h } from './dom';
+import { pushLayer } from './layers';
 
 export const COMPONENTS_HASH = '#components';
 
@@ -53,40 +54,62 @@ export function mountComponentsPage(root: HTMLElement, store: Store): () => void
     renderComponentsPage(body, { r, inputs: okInputs });
   };
 
+  /** True when the page was entered by navigating to #components (a history entry exists to go back to). */
+  let enteredByNavigation = false;
+  let popLayer: (() => void) | null = null;
+  let trigger: Element | null = null;
+
   const open = () => {
     if (!page.hidden) return;
+    trigger = document.activeElement;
     page.hidden = false;
     shownFor = null;
     render();
     page.scrollTop = 0;
     back.focus();
+    popLayer = pushLayer(goBack);
   };
   const close = () => {
+    if (page.hidden) return;
     page.hidden = true;
+    popLayer?.();
+    popLayer = null;
+    if (trigger instanceof HTMLElement && trigger.isConnected) trigger.focus();
+    trigger = null;
   };
-  const sync = () => (window.location.hash === COMPONENTS_HASH ? open() : close());
-
-  back.addEventListener('click', () => {
+  const sync = (fromNavigation: boolean) => {
     if (window.location.hash === COMPONENTS_HASH) {
-      // Drop the fragment without a page jump; hashchange does not fire for pushState.
-      history.pushState(null, '', window.location.pathname + window.location.search);
+      if (page.hidden) enteredByNavigation = fromNavigation;
+      open();
+    } else {
+      close();
+    }
+  };
+  const onNavigate = () => sync(true);
+
+  /**
+   * Leave the page. Entered via the link: step back in history, so the browser Back
+   * button does not loop between the two entries. Deep-linked: replace the entry.
+   */
+  function goBack(): void {
+    if (window.location.hash === COMPONENTS_HASH) {
+      if (enteredByNavigation) history.back();
+      else history.replaceState(null, '', window.location.pathname + window.location.search);
     }
     close();
-  });
-  const onKey = (e: KeyboardEvent) => {
-    if (e.key === 'Escape' && !page.hidden) back.click();
-  };
-  window.addEventListener('hashchange', sync);
-  window.addEventListener('popstate', sync);
-  window.addEventListener('keydown', onKey);
+  }
+
+  back.addEventListener('click', goBack);
+  window.addEventListener('hashchange', onNavigate);
+  window.addEventListener('popstate', onNavigate);
   const off = store.subscribe(render);
-  sync();
+  sync(false);
 
   return () => {
     off();
-    window.removeEventListener('hashchange', sync);
-    window.removeEventListener('popstate', sync);
-    window.removeEventListener('keydown', onKey);
+    window.removeEventListener('hashchange', onNavigate);
+    window.removeEventListener('popstate', onNavigate);
+    close();
     page.remove();
   };
 }

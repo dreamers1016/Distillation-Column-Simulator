@@ -10,6 +10,7 @@ import { COMPONENTS } from '../../src/engine/components';
 import { MIXTURES, type MixtureId } from '../../src/engine/mixtures';
 import { solve } from '../../src/engine/solve';
 import type { Inputs, Mode, Results } from '../../src/engine/types';
+import { bubblePoint } from '../../src/engine/vle';
 
 const SIMPLE_MIXTURES: MixtureId[] = ['methanol-water', 'benzene-toluene', 'hexane-heptane', 'methanol-ethanol'];
 const ADVANCED_MIXTURES = (Object.keys(MIXTURES) as MixtureId[]).filter((id) => MIXTURES[id].verified);
@@ -139,10 +140,67 @@ describe('card content', () => {
     expect(cardText(CARD_CONTENT.column(ctxFor('benzene-toluene', 'simple')))).not.toMatch(/approximation/i);
   });
 
-  it('templates the mixture names into the tray story', () => {
+  it('templates the mixture names into the tray story in relative terms', () => {
     const t = cardText(CARD_CONTENT.tray(ctxFor('methanol-water', 'simple', 2)));
-    expect(t).toMatch(/methanol-rich vapour/i);
-    expect(t).toMatch(/water-rich liquid/i);
+    expect(t).toMatch(/vapour rising from below[^.]*is richer in methanol than the liquid on the tray/i);
+    expect(t).toMatch(/liquid leaves leaner in methanol/i);
+  });
+
+  it('makes no absolute composition claims about the internal streams (reflux is methanol-rich, reboiler vapour is water-rich)', () => {
+    for (const mode of ['simple', 'advanced'] as const) {
+      const ctx = ctxFor('methanol-water', mode, 2);
+      const cards = [CARD_CONTENT.column(ctx), CARD_CONTENT.tray(ctx), CARD_CONTENT.tray({ ...ctx, tray: undefined }), CARD_CONTENT.sump(ctx), CARD_CONTENT.reboiler(ctx)];
+      for (const c of cards) expect(cardText(c), c.title).not.toMatch(/(methanol|water)-rich/i);
+    }
+    expect(cardText(CARD_CONTENT.column(ctxFor('methanol-water', 'simple')))).toMatch(/vapour arriving from below is richer in methanol than the liquid/);
+    expect(cardText(CARD_CONTENT.reboiler(ctxFor('methanol-water', 'simple')))).toMatch(/mostly water/);
+  });
+
+  it('tray 1 is fed by the reflux distributor; lower trays by the downcomer above', () => {
+    const ctx = ctxFor('methanol-water', 'advanced');
+    expect(CARD_CONTENT.tray({ ...ctx, tray: 1 }).how).toMatch(/^Reflux from the distributor/);
+    expect(CARD_CONTENT.tray({ ...ctx, tray: 1 }).how).not.toMatch(/downcomer of the tray above/);
+    expect(CARD_CONTENT.tray({ ...ctx, tray: 2 }).how).toMatch(/^Liquid leaves the downcomer of the tray above/);
+  });
+
+  it('Advanced tray temperature is the bubble point of the displayed x (every tray, within 0.05 °C), γ from the same point', () => {
+    for (const id of ['methanol-water', 'benzene-toluene'] as MixtureId[]) {
+      const ctx = ctxFor(id, 'advanced');
+      for (const p of ctx.r.trayProfile ?? []) {
+        const c = CARD_CONTENT.tray({ ...ctx, tray: p.tray });
+        const row = c.live.find(([label]) => label === 'Tray temperature');
+        const shown = Number(row?.[1].match(/^(-?[\d.]+) °C/)?.[1]);
+        const bub = bubblePoint(ctx.r.mixture, p.x, ctx.inputs.P_bar);
+        expect(Math.abs(shown - (bub.T_K - 273.15)), `${id} tray ${p.tray}`).toBeLessThanOrEqual(0.05);
+        if (id === 'methanol-water') {
+          const g = c.live.find(([label]) => label.startsWith('Activity coefficients'))?.[1] ?? '';
+          expect(g).toContain(`γ methanol = ${bub.gamma[0].toFixed(2)}`);
+          expect(g).toContain(`γ water = ${bub.gamma[1].toFixed(2)}`);
+        }
+      }
+    }
+  });
+
+  it('the generic tray card (no tray chosen) shows both operating lines', () => {
+    const c = CARD_CONTENT.tray(ctxFor('methanol-water', 'advanced'));
+    expect(c.title).toBe('Sieve tray');
+    expect(c.equations.some((e) => e.includes(String.raw`\dfrac{L}{V}`))).toBe(true);
+    expect(c.equations.some((e) => e.includes(String.raw`\dfrac{L'}{V'}`))).toBe(true);
+    expect(cardText(c)).not.toMatch(/x = /);
+  });
+
+  it('content corrections: q outside 0–1, tangent pinch, CUI range, steam-leak direction, misplaced feed', () => {
+    const ctx = ctxFor('methanol-water', 'simple');
+    const feed = cardText(CARD_CONTENT.feed(ctx));
+    expect(feed).toMatch(/q > 1: a subcooled feed also condenses some rising vapour/);
+    expect(feed).toMatch(/q < 0: a superheated feed vaporises some downflowing liquid/);
+    expect(feed).toMatch(/steps bunch up near the operating-line intersection/);
+    expect(cardText(CARD_CONTENT.refluxDrum(ctx))).toMatch(/tangent pinch[^.]*tangent to the equilibrium curve, not the q-line intersection/);
+    expect(cardText(CARD_CONTENT.column(ctx))).toMatch(/at risk between about −4 °C and 175 °C/);
+    expect(cardText(CARD_CONTENT.column(ctx))).not.toMatch(/worst between/);
+    const steam = cardText(CARD_CONTENT.steamSystem(ctx));
+    expect(steam).toMatch(/steam is normally at the higher pressure/);
+    expect(steam).toMatch(/only if the process pressure is higher/);
   });
 });
 
@@ -211,20 +269,45 @@ describe('Components page', () => {
     expect(cards.map((c) => c.dataset.kind)).toEqual(CARD_ORDER);
   });
 
-  it('opens on #components and closes with Back', () => {
+  const mountPage = () => {
     document.body.innerHTML = '<div id="root"></div>';
     const root = document.getElementById('root') as HTMLElement;
     const store = createStore(defaultState());
-    mountComponentsPage(root, store);
-    const page = () => root.querySelector<HTMLElement>('.components-page');
-    expect(page()?.hidden ?? true).toBe(true);
-    window.location.hash = '#components';
+    const unmount = mountComponentsPage(root, store);
+    return { root, store, unmount, page: () => root.querySelector<HTMLElement>('.components-page') as HTMLElement };
+  };
+  /** Let jsdom run its queued history-traversal tasks (nested zero-delay timeouts). */
+  const settle = async () => {
+    for (let i = 0; i < 20 && window.location.hash !== ''; i++) await new Promise((r) => setTimeout(r, 10));
+  };
+
+  it('opens on #components (link) and Back steps back in history instead of pushing', async () => {
+    history.replaceState(null, '', '/');
+    const { page, unmount } = mountPage();
+    expect(page().hidden).toBe(true);
+    window.location.hash = '#components'; // what the top-bar link does: one new history entry
     window.dispatchEvent(new HashChangeEvent('hashchange'));
-    expect(page()?.hidden).toBe(false);
-    expect(page()!.querySelectorAll('.card').length).toBe(14);
-    (page()!.querySelector('[data-action="back"]') as HTMLButtonElement).click();
-    expect(page()?.hidden).toBe(true);
+    expect(page().hidden).toBe(false);
+    expect(page().querySelectorAll('.card').length).toBe(14);
+    const len = history.length;
+    (page().querySelector('[data-action="back"]') as HTMLButtonElement).click();
+    expect(page().hidden).toBe(true);
+    await settle();
     expect(window.location.hash).toBe('');
+    expect(history.length).toBe(len); // no extra entry, so browser Back cannot loop
+    unmount();
+  });
+
+  it('deep-linked #components: Back replaces the entry', () => {
+    history.replaceState(null, '', '/#components');
+    const { page, unmount } = mountPage();
+    expect(page().hidden).toBe(false);
+    const len = history.length;
+    (page().querySelector('[data-action="back"]') as HTMLButtonElement).click();
+    expect(page().hidden).toBe(true);
+    expect(window.location.hash).toBe('');
+    expect(history.length).toBe(len);
+    unmount();
   });
 });
 
@@ -265,6 +348,43 @@ describe('mountCards', () => {
     (ov!.querySelector('[data-action="close"]') as HTMLButtonElement).click();
     expect(store.get().selected).toBeNull();
     expect(ov?.hidden).toBe(true);
+  });
+
+  it('Lecture overlay: focus moves to the close button and returns to the trigger on close', () => {
+    const trigger = document.createElement('button');
+    root.append(trigger);
+    trigger.focus();
+    store.set({ view: 'lecture' });
+    sel({ kind: 'reboiler' });
+    expect(document.activeElement).toBe(root.querySelector('.card-overlay [data-action="close"]'));
+    store.set((s) => ({ inputs: { ...s.inputs, R: s.inputs.R * 1.5 } })); // a re-render keeps focus in the overlay
+    const close = root.querySelector<HTMLElement>('.card-overlay [data-action="close"]') as HTMLElement;
+    expect(document.activeElement).toBe(close);
+    close.click();
+    expect(store.get().selected).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it('Escape closes only the topmost layer: the card overlay first, then the Components page', () => {
+    history.replaceState(null, '', '/');
+    const unmountPage = mountComponentsPage(root, store);
+    const page = root.querySelector<HTMLElement>('.components-page') as HTMLElement;
+    window.location.hash = '#components';
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
+    store.set({ view: 'lecture' });
+    sel({ kind: 'condenser' });
+    const ov = root.querySelector<HTMLElement>('.card-overlay') as HTMLElement;
+    expect(ov.hidden).toBe(false);
+    expect(page.hidden).toBe(false);
+    const esc = () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    esc();
+    expect(ov.hidden).toBe(true);
+    expect(store.get().selected).toBeNull();
+    expect(page.hidden).toBe(false);
+    esc();
+    expect(page.hidden).toBe(true);
+    esc(); // nothing left open: no error
+    unmountPage();
   });
 
   it('re-renders live values when the results change', () => {

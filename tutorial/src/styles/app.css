@@ -563,6 +563,10 @@ input:focus-visible {
 .card--overlay {
   font-size: 22px;
 }
+.card--overlay h4,
+.card--overlay .card-tag {
+  font-size: 0.85em;
+}
 .card--overlay .card-close {
   width: 44px;
   height: 44px;

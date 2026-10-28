@@ -19,6 +19,9 @@ if (!app) throw new Error('#app container missing from index.html');
 const store = createStore();
 mountTopbar(app, store);
 mountPanel(app, store);
+/** The 3D plant, rebuilt from each valid result (below); declared first so callbacks can use it. */
+let plant: Plant | null = null;
+
 // Selected-part card: Explore panel slot, or a large overlay in Lecture view. Hovering
 // "deck" / "weir" / "downcomer" on a tray card lights that sub-mesh (plant is built below).
 mountCards(app, store, { onSub: (tray, sub) => plant?.highlightSub(tray, sub) });
@@ -72,7 +75,6 @@ const rightInset = () => {
   return panel ? rightInsetFor(panel.getBoundingClientRect(), stageEl.clientWidth || window.innerWidth) : 0;
 };
 
-let plant: Plant | null = null;
 /** Flow particles; the previous flow carries reference speeds and phases to the rebuild. */
 let flow: Flow | null = null;
 let builtFrom: { r: Results; cutaway: boolean } | null = null;

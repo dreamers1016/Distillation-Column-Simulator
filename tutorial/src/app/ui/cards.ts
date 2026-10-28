@@ -7,6 +7,7 @@ import { cardFor, type Card, type TraySub } from '../content/components';
 import type { Inputs } from '../../engine/types';
 import type { PartRef, Store } from '../state';
 import { h } from './dom';
+import { pushLayer } from './layers';
 
 export interface RenderOptions {
   /** 'overlay' is the Lecture / projector variant (≥ 22 px body text). */
@@ -88,7 +89,8 @@ const sameRef = (a: PartRef | null, b: PartRef | null) => a?.kind === b?.kind &&
 
 /**
  * Show the selected part's card: in the Explore panel's "selected part" slot, or in
- * Lecture view as a large overlay with a close button (Escape also closes it).
+ * Lecture view as a large overlay. The overlay takes focus on its close button, gives
+ * focus back to whatever had it on close, and Escape closes it (topmost layer only).
  */
 export function mountCards(root: HTMLElement, store: Store, opts: CardsOptions = {}): () => void {
   const slot = root.querySelector<HTMLElement>('[data-slot="selected-part"]');
@@ -100,10 +102,35 @@ export function mountCards(root: HTMLElement, store: Store, opts: CardsOptions =
   overlay.addEventListener('click', (e) => {
     if (e.target === overlay) deselect(); // click on the dimmed backdrop
   });
-  const onKey = (e: KeyboardEvent) => {
-    if (e.key === 'Escape' && !overlay.hidden) deselect();
+
+  /** Set while the overlay is open: unregisters the Escape layer. */
+  let popLayer: (() => void) | null = null;
+  /** Element that had focus when the overlay opened (the trigger). */
+  let trigger: Element | null = null;
+
+  const showOverlay = () => {
+    const wasOpen = !overlay.hidden;
+    const focusInside = overlay.contains(document.activeElement);
+    overlay.hidden = false;
+    if (!wasOpen) {
+      trigger = document.activeElement;
+      popLayer = pushLayer(deselect);
+    }
+    // Re-renders replace the close button, so re-focus it if focus was in the overlay.
+    if (!wasOpen || focusInside || document.activeElement === document.body) {
+      body.querySelector<HTMLElement>('[data-action="close"]')?.focus();
+    }
   };
-  window.addEventListener('keydown', onKey);
+  const hideOverlay = () => {
+    if (overlay.hidden) return;
+    const focusInside = overlay.contains(document.activeElement);
+    overlay.hidden = true;
+    body.replaceChildren();
+    popLayer?.();
+    popLayer = null;
+    if (trigger instanceof HTMLElement && trigger.isConnected && (focusInside || document.activeElement === document.body)) trigger.focus();
+    trigger = null;
+  };
 
   /** The inputs that produced store.lastOk(): purities, E_o and pressure are inputs. */
   let okInputs: Inputs = store.get().inputs;
@@ -133,18 +160,16 @@ export function mountCards(root: HTMLElement, store: Store, opts: CardsOptions =
 
     if (!sel || !r) {
       slot?.replaceChildren();
-      body.replaceChildren();
-      overlay.hidden = true;
+      hideOverlay();
       return;
     }
     const card = cardFor(sel, { r, inputs: okInputs });
     if (s.view === 'lecture') {
       slot?.replaceChildren();
       renderCard(card, body, { size: 'overlay', onSub, onClose: deselect });
-      overlay.hidden = false;
+      showOverlay();
     } else {
-      body.replaceChildren();
-      overlay.hidden = true;
+      hideOverlay();
       if (slot) {
         renderCard(card, slot, { size: 'panel', onSub, onClose: deselect });
         if (newPart) slot.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
@@ -157,7 +182,7 @@ export function mountCards(root: HTMLElement, store: Store, opts: CardsOptions =
   return () => {
     off();
     clearSub();
-    window.removeEventListener('keydown', onKey);
+    hideOverlay();
     slot?.replaceChildren();
     overlay.remove();
   };

@@ -13,7 +13,7 @@
 // and Distillation Operation (tray operation and troubleshooting); NACE SP0198 (CUI).
 import { ALPHA_XB, ALPHA_XD } from '../../engine/mixtures';
 import { avgMW, K0, P_ATM_BAR } from '../../engine/balance';
-import { gammas } from '../../engine/activity';
+import { bubblePoint } from '../../engine/vle';
 import { STEAM_LEVELS, steamSat } from '../../engine/steam';
 import type { CondenserResult, ReboilerResult } from '../../engine/utilities';
 import type { Inputs, Results } from '../../engine/types';
@@ -83,6 +83,9 @@ function names(r: Results): Names {
   const heavy = componentName(r.mixture.heavy);
   return { light, heavy, Light: cap(light), Heavy: cap(heavy), pair: mixtureLabel(r.mixture.id) };
 }
+
+/** "mostly water" / "mostly methanol": an absolute description tied to an actual composition. */
+const richIn = (n: Names, x: number) => (x >= 0.5 ? `mostly ${n.light}` : `mostly ${n.heavy}`);
 
 const isEstimate = (r: Results) => r.mode === 'simple' || r.TtopIsEstimate;
 const temp = (r: Results, T_C: number) => fmtTempC(T_C, isEstimate(r));
@@ -172,7 +175,7 @@ function column(c: CardCtx): Card {
     tag: 'Separation vessel',
     what: `The vertical pressure vessel that holds the ${r.actualTrays} sieve trays where ${n.light} and ${n.heavy} are separated by repeated vapour–liquid contact.`,
     how:
-      `${n.Light}-rich vapour rises from the reboiler while ${n.heavy}-rich liquid flows down from the reflux; on every tray the two meet and move towards equilibrium, so the vapour gains ${n.light} as it climbs. ` +
+      `Vapour rises from the reboiler and liquid flows down from the reflux. On every tray the vapour arriving from below is richer in ${n.light} than the liquid it meets, and the two move towards equilibrium: the vapour grows richer in ${n.light} as it climbs and the liquid richer in ${n.heavy} as it falls, from reflux at x_D = ${frac(inputs.xD)} down to bottoms at x_B = ${frac(inputs.xB)}. ` +
       `The top runs coldest (${temp(r, r.Ttop_C)}) and the bottom hottest (${temp(r, r.Tbot_C)}). Above the feed tray is the rectifying section, below it the stripping section. ` +
       `${modelSentence(r, n)} The column diameter drawn here is illustrative only: this tool does no hydraulic (flooding) sizing.` +
       alphaCaveat(r, n),
@@ -205,13 +208,74 @@ function column(c: CardCtx): Card {
     problems: [
       'Flooding: too much vapour or liquid; pressure drop climbs, separation collapses and liquid is carried overhead.',
       'Pressure surges (e.g. water flashing to steam in a hot column) can lift and damage tray panels.',
-      'Corrosion under insulation (CUI): water trapped under the cladding corrodes a carbon-steel shell unseen, worst between about −4 °C and 175 °C.',
+      'Corrosion under insulation (CUI): water trapped under the cladding corrodes a carbon-steel shell unseen, at risk between about −4 °C and 175 °C.',
       'Too optimistic an E_o leaves the column short of trays, so the products go off-spec.',
     ],
   };
 }
 
+const TRAY_TYPICAL: [string, string][] = [
+  ['Tray spacing', '0.45–0.6 m'],
+  ['Hole diameter', '2.5–12 mm (5 mm common)'],
+  ['Hole area', 'typically 5–15 % of the active area'],
+  ['Weir height', '40–90 mm (40–50 mm recommended)'],
+  ['Downcomer area', 'about 10–15 % of the column cross-section'],
+];
+const TRAY_PROBLEMS = [
+  'Jet flooding: at high vapour rates froth and spray reach the tray above, and liquid is carried up the column.',
+  'Downcomer flooding: liquid backs up in the downcomer to the tray above (high liquid load or tray pressure drop).',
+  'Weeping: at low vapour rates liquid drips through the holes and bypasses the contact; dumping is the extreme case, where the tray stops working.',
+  'Entrainment: droplets carried upward dilute the purer liquid above and cut efficiency.',
+  'Foaming: stable froth fills the tray spacing and floods early, so foaming systems need derated design loads.',
+];
+const TRAY_WHAT = 'A perforated steel plate on which rising vapour bubbles through a layer of liquid, bringing the two phases close to equilibrium.';
+const EQ_RECT = String.raw`y_{n+1} = \dfrac{L}{V}\,x_n + \dfrac{D}{V}\,x_D`;
+const EQ_STRIP = String.raw`y_{m+1} = \dfrac{L'}{V'}\,x_m - \dfrac{B}{V'}\,x_B`;
+const EQ_MURPHREE = String.raw`E_{MV} = \dfrac{y_n - y_{n+1}}{y_n^{*} - y_{n+1}}`;
+const eqEquilibrium = (r: Results) =>
+  r.mode === 'simple' ? String.raw`y^{*} = \dfrac{\alpha\,x}{1 + (\alpha - 1)\,x}` : String.raw`y_i\,P = x_i\,\gamma_i\,P_i^{sat}(T)`;
+
+/**
+ * What happens on a tray, in relative terms. The vapour arriving from below is richer in
+ * the light component than the liquid on the tray; it is NOT light-rich in absolute terms
+ * (the reboiler vapour is mostly the heavy component, the reflux mostly the light one).
+ */
+function trayStory(n: Names, inlet: string): string {
+  return (
+    `${inlet} The vapour rising from below through the deck holes is richer in ${n.light} than the liquid on the tray; as it bubbles through the froth, ${n.light} moves into the vapour and ${n.heavy} into the liquid. ` +
+    `So the vapour leaves richer in ${n.light} than it arrived, and the liquid leaves leaner in ${n.light}. ` +
+    'The outlet weir holds the liquid depth on the deck; the liquid spills over it into the downcomer, where trapped vapour separates before the liquid reaches the tray below. Downcomers alternate sides from tray to tray.'
+  );
+}
+
+/** Tray card with no tray chosen (Components page): describes both sections. */
+function trayGeneric(c: CardCtx): Card {
+  const { r, inputs } = c;
+  const n = names(r);
+  return {
+    title: 'Sieve tray',
+    tag: 'Column internals',
+    kind: 'tray',
+    what: TRAY_WHAT,
+    how:
+      trayStory(n, 'Liquid flows across each deck: on tray 1 it comes from the reflux distributor, on every other tray from the downcomer of the tray above.') +
+      ` Between trays the streams follow the rectifying operating line above the feed tray and the stripping line from the feed tray down. ${modelSentence(r, n)} ` +
+      `Real trays fall short of equilibrium: at E_o = ${fmtNum(inputs.Eo, 2)}, ${r.actualTrays} actual trays do the work of ${r.theoreticalTrays} theoretical ones.` +
+      alphaCaveat(r, n),
+    equations: [eqEquilibrium(r), EQ_RECT, EQ_STRIP, EQ_MURPHREE],
+    live: [
+      ['Trays', `${r.actualTrays} actual, feed on tray ${r.feedTray}`],
+      ['Rectifying flows (CMO)', `L = ${kmol(r.L)} · V = ${kmol(r.V)}`],
+      ['Stripping flows (CMO)', `L′ = ${kmol(r.Lp)} · V′ = ${kmol(r.Vp)}`],
+      ['Tray x, y, T and γ', r.trayProfile ? 'pick a tray in 3D to see its values' : 'Advanced mode only'],
+    ],
+    typical: TRAY_TYPICAL,
+    problems: TRAY_PROBLEMS,
+  };
+}
+
 function tray(c: CardCtx): Card {
+  if (c.tray === undefined) return trayGeneric(c);
   const { r, inputs } = c;
   const n = names(r);
   const k = trayNo(c);
@@ -221,42 +285,38 @@ function tray(c: CardCtx): Card {
 
   const profile: [string, string][] = [];
   if (p) {
+    // T and gamma are evaluated exactly at the displayed tray liquid x (bubble point at column
+    // pressure). Interpolating the stage temperatures instead differs by up to about 1.4 °C.
+    const bub = bubblePoint(r.mixture, p.x, inputs.P_bar);
+    const [g1, g2] = bub.gamma;
     profile.push(
       [`Liquid leaving (mole fraction ${n.light})`, `x = ${frac(p.x)}`],
       [`Vapour leaving (mole fraction ${n.light})`, `y = ${frac(p.y)}`],
-      ['Tray temperature', `${fmtNum(p.T_C, 1)} °C (bubble point of x)`],
+      ['Tray temperature', `${fmtNum(bub.T_K - K0, 1)} °C (bubble point of x)`],
+      r.mixture.model === 'nrtl'
+        ? ['Activity coefficients (NRTL)', `γ ${n.light} = ${fmtNum(g1, 2)} · γ ${n.heavy} = ${fmtNum(g2, 2)}`]
+        : ['Activity coefficients', 'γ = 1 (ideal solution)'],
+      ['Profile', 'x, y ≈ interpolated between theoretical stages'],
     );
-    if (r.mixture.model === 'nrtl') {
-      const [g1, g2] = gammas(r.mixture, p.x, p.T_C + K0);
-      profile.push(['Activity coefficients (NRTL)', `γ ${n.light} = ${fmtNum(g1, 2)} · γ ${n.heavy} = ${fmtNum(g2, 2)}`]);
-    } else {
-      profile.push(['Activity coefficients', 'γ = 1 (ideal solution)']);
-    }
-    profile.push(['Profile', '≈ interpolated between theoretical stages']);
   } else {
     profile.push(['Tray x, y, T and γ', 'Advanced mode only']);
   }
+  const inlet =
+    k === 1
+      ? 'Reflux from the distributor, at the distillate composition, flows across the deck of this top tray.'
+      : 'Liquid leaves the downcomer of the tray above and flows across the deck.';
 
   return {
     title: `Tray ${k} of ${r.actualTrays} · sieve tray`,
     tag: section,
     kind: 'tray',
     tray: k,
-    what: 'A perforated steel plate on which rising vapour bubbles through a layer of liquid, bringing the two phases close to equilibrium.',
+    what: TRAY_WHAT,
     how:
-      `Liquid leaves the downcomer of the tray above and flows across the deck. ${n.Light}-rich vapour from below rises through the deck holes and bubbles through the froth: ${n.light} moves into the vapour, ${n.heavy} into the liquid. ` +
-      `The outlet weir holds the liquid depth on the deck; the liquid spills over it into the downcomer, where trapped vapour separates before the ${n.heavy}-rich liquid reaches the tray below. Downcomers alternate sides from tray to tray. ` +
-      `${modelSentence(r, n)} Real trays fall short of equilibrium: at E_o = ${fmtNum(inputs.Eo, 2)}, ${r.actualTrays} actual trays do the work of ${r.theoreticalTrays} theoretical ones.` +
+      trayStory(n, inlet) +
+      ` ${modelSentence(r, n)} Real trays fall short of equilibrium: at E_o = ${fmtNum(inputs.Eo, 2)}, ${r.actualTrays} actual trays do the work of ${r.theoreticalTrays} theoretical ones.` +
       alphaCaveat(r, n),
-    equations: [
-      r.mode === 'simple'
-        ? String.raw`y^{*} = \dfrac{\alpha\,x}{1 + (\alpha - 1)\,x}`
-        : String.raw`y_i\,P = x_i\,\gamma_i\,P_i^{sat}(T)`,
-      rect
-        ? String.raw`y_{n+1} = \dfrac{L}{V}\,x_n + \dfrac{D}{V}\,x_D`
-        : String.raw`y_{m+1} = \dfrac{L'}{V'}\,x_m - \dfrac{B}{V'}\,x_B`,
-      String.raw`E_{MV} = \dfrac{y_n - y_{n+1}}{y_n^{*} - y_{n+1}}`,
-    ],
+    equations: [eqEquilibrium(r), rect ? EQ_RECT : EQ_STRIP, EQ_MURPHREE],
     live: [
       ['Position', `tray ${k} of ${r.actualTrays} from the top; feed on tray ${r.feedTray}`],
       ...profile,
@@ -264,20 +324,8 @@ function tray(c: CardCtx): Card {
         ? ['Section flows (CMO)', `L = ${kmol(r.L)} · V = ${kmol(r.V)}`]
         : [k === r.feedTray ? 'Liquid leaving / vapour entering' : 'Section flows (CMO)', `L′ = ${kmol(r.Lp)} · V′ = ${kmol(r.Vp)}`],
     ],
-    typical: [
-      ['Tray spacing', '0.45–0.6 m'],
-      ['Hole diameter', '2.5–12 mm (5 mm common)'],
-      ['Hole area', 'typically 5–15 % of the active area'],
-      ['Weir height', '40–90 mm (40–50 mm recommended)'],
-      ['Downcomer area', 'about 10–15 % of the column cross-section'],
-    ],
-    problems: [
-      'Jet flooding: at high vapour rates froth and spray reach the tray above, and liquid is carried up the column.',
-      'Downcomer flooding: liquid backs up in the downcomer to the tray above (high liquid load or tray pressure drop).',
-      'Weeping: at low vapour rates liquid drips through the holes and bypasses the contact; dumping is the extreme case, where the tray stops working.',
-      'Entrainment: droplets carried upward dilute the purer liquid above and cut efficiency.',
-      'Foaming: stable froth fills the tray spacing and floods early, so foaming systems need derated design loads.',
-    ],
+    typical: TRAY_TYPICAL,
+    problems: TRAY_PROBLEMS,
   };
 }
 
@@ -290,7 +338,7 @@ function feed(c: CardCtx): Card {
     tag: `Feed · tray ${r.feedTray}`,
     what: `Where the ${n.light}–${n.heavy} feed enters the column: a nozzle and internal pipe deliver it onto tray ${r.feedTray}.`,
     how:
-      'The feed condition q is the fraction of the feed that joins the downflowing liquid. A saturated-liquid feed (q = 1) adds all of F to the liquid; a saturated-vapour feed (q = 0) adds it all to the vapour. ' +
+      'The feed condition q is the fraction of the feed that joins the downflowing liquid. A saturated-liquid feed (q = 1) adds all of F to the liquid; a saturated-vapour feed (q = 0) adds it all to the vapour. Outside that range, q > 1: a subcooled feed also condenses some rising vapour; q < 0: a superheated feed vaporises some downflowing liquid. ' +
       `The best feed point is the stage where McCabe-Thiele stepping crosses the q-line: theoretical stage ${r.feedStage}, which maps to actual tray ${r.feedTray} by dividing by E_o and rounding up (capped at the tray count). ` +
       (r.mode === 'simple'
         ? 'In Simple mode q is set directly.'
@@ -316,7 +364,7 @@ function feed(c: CardCtx): Card {
       ['Liquid feed line velocity', '1–3 m/s'],
     ],
     problems: [
-      'Wrong feed tray location: stages around the feed pinch and do little work, so more reflux or more trays are needed for the same purity.',
+      'Wrong feed tray location: a misplaced feed wastes stages; steps bunch up near the operating-line intersection and do little separation, so more reflux or more trays are needed for the same purity.',
       'Flashing feed: a feed above its bubble point at column pressure flashes in the nozzle, causing vapour slugs, erosion and poor distribution (needs a flash-feed gallery).',
       'Feed composition or temperature swings shift q and the internal flows, and the products drift off-spec.',
     ],
@@ -330,7 +378,7 @@ function distributor(c: CardCtx): Card {
   return {
     title: 'Reflux distributor',
     tag: 'Column internals · top',
-    what: `A perforated pipe header above tray 1 that spreads the returning ${n.light}-rich reflux over the top tray.`,
+    what: `A perforated pipe header above tray 1 that spreads the returning reflux (${richIn(n, inputs.xD)}, at the distillate composition) over the top tray.`,
     how:
       'Reflux arrives from the reflux drum as saturated liquid with the distillate composition, and is spread over the inlet area of tray 1. ' +
       'Its rate L = R·D is the only liquid source for the rectifying section, so with CMO every tray above the feed carries the same liquid flow L. ' +
@@ -364,7 +412,7 @@ function sump(c: CardCtx): Card {
   return {
     title: 'Column sump',
     tag: 'Bottom head',
-    what: `The liquid pool in the bottom head that collects ${n.heavy}-rich liquid from the bottom tray and feeds the kettle reboiler.`,
+    what: `The liquid pool in the bottom head that collects the liquid leaving the bottom tray and feeds the kettle reboiler.`,
     how:
       'Liquid from the bottom tray (L′) falls into the sump and flows to the kettle reboiler. The reboiler boils part of it and returns the vapour (V′) under the bottom tray; the rest overflows the kettle weir as bottoms product (B). ' +
       'The sump hold-up keeps the reboiler and the bottoms line fed through upsets, and its level must stay below the vapour-return nozzle.',
@@ -409,7 +457,7 @@ function condenser(c: CardCtx): Card {
   return {
     title: 'Overhead condenser',
     tag: `Shell-and-tube · total condenser · ${cap(coolant)}`,
-    what: `A shell-and-tube exchanger that condenses all of the ${n.light}-rich overhead vapour to saturated liquid (a total condenser).`,
+    what: `A shell-and-tube exchanger that condenses all of the overhead vapour (${richIn(n, c.inputs.xD)}, y = x_D) to saturated liquid (a total condenser).`,
     how:
       `Overhead vapour (${temp(r, vapourT)}) enters the shell and condenses on the outside of the tubes, while the coolant flows through the tubes and warms up. ` +
       `The condensing side stays near one temperature, the distillate bubble point Tcond = ${temp(r, r.Ttop_C)}, so the driving force is the log-mean of the two end temperature differences. The condensate drains to the reflux drum. ` +
@@ -486,11 +534,11 @@ function refluxDrum(c: CardCtx): Card {
   return {
     title: 'Reflux drum',
     tag: 'Accumulator',
-    what: `A horizontal vessel that collects the condensed ${n.light}-rich liquid and splits it into reflux and distillate product.`,
+    what: `A horizontal vessel that collects the condensed overhead liquid (${richIn(n, inputs.xD)}) and splits it into reflux and distillate product.`,
     how:
       'Condensate drains in from the condenser and the drum inventory buffers the flows. The reflux ratio sets the split: L = R·D returns to the top of the column (by gravity in this layout) and D leaves as product. ' +
       'Raising R moves the operating lines away from the equilibrium curve: fewer stages, but more vapour V = (R + 1)D and so higher condenser and reboiler duties. ' +
-      'At the minimum reflux R_min an operating line touches the equilibrium curve (a pinch) and no number of stages gives the separation. (x_p, y_p) is where the two operating lines meet on the q-line at R_min.',
+      'At the minimum reflux R_min an operating line touches the equilibrium curve (a pinch) and no number of stages gives the separation. (x_p, y_p) is where the two operating lines meet on the q-line at R_min; for a feed pinch that point lies on the equilibrium curve. For a tangent pinch the touching point is elsewhere: where an operating line is tangent to the equilibrium curve, not the q-line intersection.',
     equations: [
       String.raw`R = \dfrac{L}{D} \qquad V = L + D = (R+1)\,D`,
       String.raw`\dfrac{R_{min}}{R_{min}+1} = \dfrac{x_D - y_p}{x_D - x_p}`,
@@ -536,9 +584,9 @@ function reboiler(c: CardCtx): Card {
   return {
     title: 'Kettle reboiler',
     tag: `Kettle · ${b.level === 'HOT_OIL' ? 'needs hot oil' : steam}`,
-    what: `A kettle-type exchanger that boils part of the ${n.heavy}-rich bottoms liquid to make the vapour that drives the column.`,
+    what: `A kettle-type exchanger that boils part of the bottoms liquid (${richIn(n, inputs.xB)}) to make the vapour that drives the column.`,
     how:
-      `${n.Heavy}-rich liquid from the sump fills the shell and covers the U-tube bundle. Steam condenses inside the tubes and the liquid boils on the outside at ${temp(r, r.Tbot_C)}. ` +
+      `Liquid from the sump fills the shell and covers the U-tube bundle. Steam condenses inside the tubes and the liquid boils on the outside at ${temp(r, r.Tbot_C)}. ` +
       'The vapour (V′) returns to the column under the bottom tray; the liquid that overflows the weir leaves as bottoms product. ' +
       'Both sides change phase at constant temperature, so the driving force is simply ΔT = Tsat − Treb, not a log-mean. ' +
       'The kettle is a partial reboiler: its vapour and liquid leave in equilibrium, so it counts as theoretical stage N. Auto selection picks the cheapest steam level with ΔT ≥ 20 °C.',
@@ -570,7 +618,7 @@ function reboiler(c: CardCtx): Card {
       'Fouling on the boiling side (scale, polymer, solids) lowers U and the duty falls.',
       'Excessive ΔT pushes boiling past the critical heat flux into film boiling: a vapour blanket insulates the tubes and the duty drops.',
       'Steam trap failure: stuck shut, condensate floods the tubes and the duty falls; stuck open, live steam blows into the condensate system.',
-      `Low level uncovers the tube bundle: dry tubes foul quickly and less ${n.heavy}-rich vapour is produced.`,
+      'Low level uncovers the tube bundle: dry tubes foul quickly and less vapour is produced.',
     ],
   };
 }
@@ -605,7 +653,7 @@ function steamSystem(c: CardCtx): Card {
       'Steam trap failure: blowing traps waste steam; blocked traps waterlog the reboiler.',
       'Water hammer when condensate collects in steam or return lines and is slammed by steam.',
       'Header pressure dips when other users draw steam: Tsat falls and the reboiler duty drops.',
-      'A tube leak contaminates the condensate return, which must be dumped instead of reused as boiler feed.',
+      'Tube leak: steam is normally at the higher pressure, so steam and water leak into the process side. Process fluid contaminates the condensate only if the process pressure is higher (e.g. propane–butane at 18 bar abs against MP steam) or the steam is throttled at turndown; that condensate must be dumped, not returned as boiler feed.',
     ],
   };
 }
@@ -619,7 +667,7 @@ function skirt(c: CardCtx): Card {
     what: "The cylindrical steel support welded to the bottom head that carries the column's weight and wind load down to the foundation.",
     how:
       'The skirt stands on a base ring held to the concrete by anchor bolts. It also lifts the column so the bottoms line gets static head: ' +
-      `the bottoms are ${n.heavy}-rich liquid at its bubble point (${temp(r, r.Tbot_C)}), so the pump's net positive suction head comes almost entirely from elevation. Access openings and vents allow inspection and stop flammable vapour collecting inside.`,
+      `the bottoms (${richIn(n, c.inputs.xB)}) are liquid at their bubble point (${temp(r, r.Tbot_C)}), so the pump's net positive suction head comes almost entirely from elevation. Access openings and vents allow inspection and stop flammable vapour collecting inside.`,
     equations: [
       String.raw`\text{NPSH}_A = \dfrac{P - P^{sat}}{\rho\,g} + h_s - h_f \;\approx\; h_s - h_f \quad (P = P^{sat})`,
       String.raw`\sigma = \dfrac{W}{\pi D t}`,
@@ -714,7 +762,7 @@ function nozzle(c: CardCtx): Card {
     what: 'Flanged pipe connections through the shell: overhead vapour, reflux, feed, reboiler vapour return and bottoms.',
     how:
       'Each nozzle is sized for its stream: vapour lines run fast and are large, liquid lines run slow. ' +
-      `The overhead nozzle carries V = ${kmol(r.V)} of ${n.light}-rich vapour; its volume flow follows from the ideal-gas law at the top temperature and column pressure.`,
+      `The overhead nozzle carries V = ${kmol(r.V)} of overhead vapour (${richIn(n, c.inputs.xD)}); its volume flow follows from the ideal-gas law at the top temperature and column pressure.`,
     equations: [String.raw`Q_V = \dfrac{V\,R_g\,T}{P}`, String.raw`d = \sqrt{\dfrac{4\,Q_V}{\pi\,u}}`],
     live: [
       ['Overhead vapour', `${kmol(r.V)} ≈ ${fmtNum(Q, 3)} m³/s at ${temp(r, T)}, ${fmtNum(P, 2)} bar abs`],
