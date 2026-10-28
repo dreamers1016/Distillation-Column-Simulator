@@ -1,6 +1,6 @@
 // Explore panel: mixture picker, operating-condition sliders, utility overrides,
 // results grid, warnings, assumptions, plus empty slots for the selected-part
-// card (Task 12) and the charts (Task 13).
+// card and the charts (McCabe-Thiele and profile, src/app/charts).
 //
 // The controls are built once per calculation mode and then only have their
 // values synced, so a slider being dragged is never rebuilt under the pointer.
@@ -10,6 +10,7 @@ import { solve } from '../../engine/solve';
 import type { CondenserResult, ReboilerResult } from '../../engine/utilities';
 import type { Inputs, Results, SolveResult } from '../../engine/types';
 import { componentName, fmtKgh, fmtKW, fmtNum, fmtTempC, mixtureLabel } from '../format';
+import { mountCharts } from '../charts/mount';
 import { setMixture, type Store } from '../state';
 import { h } from './dom';
 
@@ -321,6 +322,7 @@ export function mountPanel(root: HTMLElement, store: Store, opts: PanelOptions =
     h('div', { 'data-slot': 'chart' }),
   );
   root.append(panel);
+  const offCharts = mountCharts(panel.querySelector('[data-slot="chart"]') as HTMLElement, store);
 
   let builtMode: Inputs['mode'] | null = null;
   let shownInputs: Inputs | null = null;
@@ -339,6 +341,7 @@ export function mountPanel(root: HTMLElement, store: Store, opts: PanelOptions =
 
   return () => {
     off();
+    offCharts();
     panel.remove();
   };
 }

@@ -636,3 +636,29 @@ input:focus-visible {
 .components-body .empty {
   color: var(--muted);
 }
+
+/* ---- charts (McCabe-Thiele, column profile) ----------------------------- */
+[data-slot='chart'] {
+  margin-top: 14px;
+}
+.charts {
+  transition: opacity 0.15s;
+}
+.charts.stale {
+  opacity: 0.5;
+}
+.chart-sec {
+  margin-bottom: 14px;
+}
+.chart-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.chart-note {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: var(--paper);
+  color: var(--muted);
+}
