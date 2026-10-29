@@ -3,7 +3,14 @@
   --paper: #f4ecdc;
   --grid: #e5dccb;
   --ink: #1f2a36;
+  /* Teal for fills, borders and markers only: 3.05:1 on --card, 2.64:1 on --paper, too light for text. */
   --teal: #14a3a0;
+  /* Teal TEXT (and the white-on-teal Next button): 4.70:1 on --paper, 5.43:1 on --card, 5.52:1 on
+     white and with white text (WCAG AA 4.5:1). #0d7c79 was the first proposal: 4.95:1 on --card
+     but only 4.28:1 on --paper. */
+  --teal-text: #0c7572;
+  /* Hover fill of the Next button: 6.87:1 with white text. */
+  --teal-deep: #0a6563;
   --card: #fffdf8;
   --line: #d8ccb4;
   /* Secondary text: 5.5:1 on --paper, 6.3:1 on --card (WCAG AA 4.5:1). Was #6b7580 (4.0:1 on paper). */

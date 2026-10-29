@@ -1127,8 +1127,11 @@ final review to triage.
 These are recorded in the ledger. None of them affects the engine's validated numbers.
 
 **Accessibility and layout**
-- The teal text colour has a contrast ratio of 3.05:1 on some labels, below the WCAG AA
-  4.5:1. A darker teal for text is proposed.
+- ~~The teal text colour has a contrast ratio of 3.05:1 on some labels.~~ Fixed in the final
+  review: teal *text* uses `--teal-text: #0c7572` (4.70:1 on paper, 5.43:1 on card) and the
+  Next button is white on #0c7572 (5.52:1), hover #0a6563 (6.87:1). `--teal` (#14a3a0)
+  stays for fills, borders and markers. The first proposal, #0d7c79, was checked and
+  rejected: 4.95:1 on card but 4.28:1 on paper. `legibility.test.ts` now asserts every case.
 - At 1366 and 1024 px the Explore lesson strip can hide the overhead vapour line.
 - Some fixed-distance camera views crop the condenser step on phones.
 - 3D pins overlap on very tall or narrow views.

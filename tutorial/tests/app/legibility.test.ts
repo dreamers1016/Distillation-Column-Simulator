@@ -54,6 +54,43 @@ describe('secondary text contrast (WCAG AA 4.5:1)', () => {
   });
 });
 
+/** The declarations of the first rule whose selector list contains `sel` exactly. */
+function rule(sel: string): string {
+  for (const m of app.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    if (m[1].split(',').map((s) => s.trim()).includes(sel)) return m[2];
+  }
+  throw new Error(`no rule for ${sel}`);
+}
+/** Resolve `var(--x)` or a literal #rrggbb from a declaration value. */
+const colourOf = (decl: string, prop: string): string => {
+  const m = decl.match(new RegExp(`(?:^|[;\\s])${prop}:\\s*([^;]+);`));
+  if (!m) throw new Error(`no ${prop} in { ${decl} }`);
+  const v = m[1].trim();
+  const t = v.match(/^var\(--([\w-]+)\)$/);
+  return t ? token(t[1]) : v;
+};
+
+describe('teal text contrast (WCAG AA 4.5:1)', () => {
+  it('--teal-text on --paper, on --card and on white', () => {
+    expect(contrast(token('teal-text'), token('paper'))).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(token('teal-text'), token('card'))).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(token('teal-text'), '#ffffff')).toBeGreaterThanOrEqual(4.5);
+  });
+  it('no rule sets a text colour to the light --teal (fills, borders and markers only)', () => {
+    expect(app).not.toMatch(/(?:^|[;{\s])color:\s*var\(--teal\)/m);
+  });
+  it.each(['.sl output', '.card-tag', '.sub-word', '.toplink:hover', '.card-close:hover'])('%s uses --teal-text', (sel) => {
+    expect(rule(sel)).toMatch(/(?:^|[;\s])color:\s*var\(--teal-text\)/);
+  });
+  it('white on the Next button fill, and on its hover fill', () => {
+    const next = rule('.pres-next');
+    expect(colourOf(next, 'color')).toBe('#fff');
+    expect(contrast('#ffffff', colourOf(next, 'background'))).toBeGreaterThanOrEqual(4.5);
+    const hover = rule('.pres-next:hover:not(:disabled)');
+    expect(contrast('#ffffff', colourOf(hover, 'background'))).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
 describe('projector widths (>= 1700 px): secondary text >= 14 px', () => {
   const sizes = projectorSizes();
   it.each([

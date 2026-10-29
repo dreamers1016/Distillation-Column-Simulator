@@ -145,7 +145,7 @@ body.view-lecture .pin {
 }
 .toplink:hover {
   border-color: var(--teal);
-  color: var(--teal);
+  color: var(--teal-text);
 }
 
 /* ---- explore panel ----------------------------------------------------- */
@@ -205,7 +205,7 @@ input:focus-visible {
 }
 .sl output {
   font-variant-numeric: tabular-nums;
-  color: var(--teal);
+  color: var(--teal-text);
   white-space: nowrap;
 }
 .sl input[type='range'] {
@@ -468,7 +468,7 @@ input:focus-visible {
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--teal);
+  color: var(--teal-text);
 }
 .card h3 {
   margin: 2px 0 0;
@@ -529,11 +529,11 @@ input:focus-visible {
 .card-close:hover,
 .card-close:focus-visible {
   border-color: var(--teal);
-  color: var(--teal);
+  color: var(--teal-text);
   outline: none;
 }
 .sub-word {
-  color: var(--teal);
+  color: var(--teal-text);
   font-weight: 700;
   border-bottom: 2px dotted var(--teal);
   cursor: help;
@@ -827,8 +827,12 @@ body[data-view='lecture'] .lessons {
 }
 .pres-next {
   color: #fff;
-  background: var(--teal);
-  border-color: var(--teal);
+  background: var(--teal-text);
+  border-color: var(--teal-text);
+}
+.pres-next:hover:not(:disabled) {
+  background: var(--teal-deep);
+  border-color: var(--teal-deep);
 }
 .step-dots {
   display: flex;
