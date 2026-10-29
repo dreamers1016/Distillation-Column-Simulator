@@ -162,3 +162,22 @@ describe('Advanced tray profile ends at the bottoms composition (no overshoot)',
     expect(Math.abs(r.Tbot_C - 92.51)).toBeLessThanOrEqual(0.05);
   });
 });
+
+describe('ANTOINE_RANGE warnings: one per component, at the most extreme temperature', () => {
+  it('methanol-water at 25 bar lists one line for methanol and one for water (was 6), each at the hottest T', () => {
+    const r = meoh({ P_bar: 25 });
+    const range = r.warnings.filter((w) => w.code === 'ANTOINE_RANGE');
+    expect(range).toHaveLength(2);
+    expect(range.filter((w) => /^Methanol /.test(w.message))).toHaveLength(1);
+    expect(range.filter((w) => /^Water /.test(w.message))).toHaveLength(1);
+    // the reboiler (bubble point of xB) is the hottest point evaluated
+    const TbotK = (r.Tbot_C + 273.15).toFixed(1);
+    for (const w of range) expect(w.message).toContain(`evaluated at ${TbotK} K`);
+  });
+  it('propane-butane at 1 atm keeps one cold-side propane warning (the coldest T)', () => {
+    const r = ok(solveAdvanced(inputs('propane-butane', { P_bar: 1.01325 })));
+    const propane = r.warnings.filter((w) => w.code === 'ANTOINE_RANGE' && /^Propane /.test(w.message));
+    expect(propane).toHaveLength(1);
+    expect(propane[0].message).toContain(`evaluated at ${(r.Ttop_C + 273.15).toFixed(1)} K`);
+  });
+});

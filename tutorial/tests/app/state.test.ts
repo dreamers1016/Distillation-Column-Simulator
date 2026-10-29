@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest';
-import { createStore, defaultState, setMixture, setMode } from '../../src/app/state';
+import { createStore, defaultState, setMixture, setMode, type Store } from '../../src/app/state';
 import { solve } from '../../src/engine/solve';
 import { MIXTURES } from '../../src/engine/mixtures';
 import type { Inputs } from '../../src/engine/types';
@@ -52,6 +52,24 @@ describe('store', () => {
     off();
     store.set({ cutaway: true });
     expect(seen.length).toBe(2);
+  });
+
+  it('a nested set inside a subscriber: later subscribers see only the current state, once', () => {
+    const { store } = countingStore();
+    const calls: { s: ReturnType<Store['get']>; r: ReturnType<Store['result']> }[] = [];
+    store.subscribe((s) => {
+      if (s.inputs.R === 3) store.set((p) => ({ inputs: { ...p.inputs, R: 4 } })); // e.g. a clamp
+    });
+    store.subscribe((s, r) => {
+      expect(s).toBe(store.get()); // never stale
+      expect(r).toBe(store.result());
+      calls.push({ s, r });
+    });
+    store.set((p) => ({ inputs: { ...p.inputs, R: 3 } }));
+    expect(store.get().inputs.R).toBe(4);
+    expect(calls).toHaveLength(1); // the outer pass after the nested one is skipped
+    expect(calls[0].s.inputs.R).toBe(4);
+    expect(calls[0].r.ok && calls[0].r.L / calls[0].r.D_kmolh).toBeCloseTo(4, 9);
   });
 
   it('remembers the last valid result when a later solve fails', () => {

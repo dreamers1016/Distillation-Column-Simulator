@@ -156,6 +156,19 @@ describe('card content', () => {
     expect(cardText(CARD_CONTENT.reboiler(ctxFor('methanol-water', 'simple')))).toMatch(/mostly water/);
   });
 
+  it('Rmin = 0 (methanol-water Simple, q 0.2, xF 0.97, xD 0.98): distributor and drum rows say so, never ∞', () => {
+    const inputs: Inputs = { ...defaultInputs(), mixtureId: 'methanol-water', mode: 'simple', q: 0.2, xF: 0.97, xD: 0.98 };
+    const r = solve(inputs);
+    if (!r.ok) throw new Error(r.error.message);
+    expect(r.Rmin).toBe(0);
+    const ctx: CardCtx = { r, inputs };
+    for (const k of ['distributor', 'refluxDrum'] as const) {
+      const rows = CARD_CONTENT[k](ctx).live.map(([a, b]) => `${a}: ${b}`).join('\n');
+      expect(rows, k).toContain('Rmin = 0 (any R separates)');
+      expect(rows, k).not.toMatch(/R\/Rmin|∞|Infinity|NaN/);
+    }
+  });
+
   it('tray 1 is fed by the reflux distributor; lower trays by the downcomer above', () => {
     const ctx = ctxFor('methanol-water', 'advanced');
     expect(CARD_CONTENT.tray({ ...ctx, tray: 1 }).how).toMatch(/^Reflux from the distributor/);

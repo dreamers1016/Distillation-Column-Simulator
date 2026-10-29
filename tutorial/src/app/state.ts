@@ -75,6 +75,10 @@ export function createStore(initial: AppState = defaultState(), solver: Solver =
   let lastOkInputs: Inputs | null = result.ok ? solvedFor : null;
   const subs = new Set<(s: AppState, r: SolveResult) => void>();
   const toasts = new Set<(m: string) => void>();
+  // Bumped by every set(). A subscriber that calls set() starts a nested notification pass that
+  // delivers the newer state to every subscriber; the outer pass then stops, so no subscriber
+  // is called again afterwards with what is, by then, an older notification.
+  let generation = 0;
 
   return {
     get: () => state,
@@ -91,7 +95,11 @@ export function createStore(initial: AppState = defaultState(), solver: Solver =
           lastOkInputs = solvedFor;
         }
       }
-      for (const fn of [...subs]) fn(state, result);
+      const gen = ++generation;
+      for (const fn of [...subs]) {
+        if (gen !== generation) break; // a nested set() already notified everyone with newer state
+        fn(state, result);
+      }
     },
     subscribe(fn) {
       subs.add(fn);

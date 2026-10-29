@@ -1,6 +1,7 @@
 // Equilibrium curves y*(x) for McCabe-Thiele work. Mole fractions of the light
 // component. A curve is either analytic (constant relative volatility) or a
-// 400-interval table of the real bubble-point y*(x), linearly interpolated.
+// table of the real bubble-point y*(x) at 401 end-packed (Chebyshev) nodes,
+// x_i = (1 - cos(pi i / 400)) / 2, linearly interpolated (see vleCurve).
 import type { MixturePreset } from './mixtures';
 import { bubblePoint, VleModelError } from './vle';
 

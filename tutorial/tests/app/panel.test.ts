@@ -271,6 +271,30 @@ describe('results', () => {
     expect(q('[data-role="compare"]')).toBeNull();
   });
 
+  it('Rmin = 0 for valid inputs: says "any R separates" and prints no R/Rmin ratio (never ∞)', () => {
+    store.set((s) => ({ inputs: { ...s.inputs, mixtureId: 'methanol-water', mode: 'simple', q: 0.2, xF: 0.97, xD: 0.98 } }));
+    const r = store.result();
+    expect(r.ok && r.Rmin).toBe(0);
+    const cellText = text('[data-result="Rmin"]');
+    expect(cellText).toContain('Rmin = 0 (any R separates)');
+    expect(cellText).not.toContain('R/Rmin');
+    expect(cellText).not.toMatch(/∞|Infinity|NaN/);
+  });
+
+  it('labels the pressure when Advanced P differs from 1 atm (Simple always runs at 1 atm)', () => {
+    setMode(store, 'advanced');
+    expect(text('[data-role="compare"]')).not.toContain('at 1 atm'); // default P = 1.01325 bar
+    drag('P_bar', 2);
+    const adv = store.result();
+    if (!adv.ok) throw new Error('expected ok');
+    const simple = solve({ ...store.get().inputs, mode: 'simple', q: adv.q });
+    if (!simple.ok) throw new Error('expected ok');
+    const row = text('[data-role="compare"]');
+    expect(row).toContain(`Simple N (at 1 atm) = ${simple.N}`);
+    expect(row).toContain(`Advanced N (at 2 bar abs) = ${adv.N}`);
+    expect(row).not.toMatch(/same inputs(?!,)/);
+  });
+
   it('lists the assumptions box and every engine warning', () => {
     const r = store.result();
     if (!r.ok) throw new Error('expected ok');

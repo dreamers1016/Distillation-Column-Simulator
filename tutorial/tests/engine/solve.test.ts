@@ -284,5 +284,8 @@ describe('fuzz: 2,000 random in-slider-range inputs', () => {
     console.log(`fuzz ${N} inputs in ${((Date.now() - t0) / 1000).toFixed(1)} s:`, JSON.stringify(counts), stageLimitMessages);
     // the fuzz must exercise the success path, not just the validators
     expect(counts.ok).toBeGreaterThan(200);
-  }, 120_000);
+    // 240 s, not 120 s: measured 20-48 s (48 s under the full parallel suite, 21 files sharing
+    // the CPU), so 120 s left only 2.5x headroom on a busy or slower machine. N stays at 2,000
+    // so the coverage of the input space does not shrink; only the wall-clock bound grows.
+  }, 240_000);
 });

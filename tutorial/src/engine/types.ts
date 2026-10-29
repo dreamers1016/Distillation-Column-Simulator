@@ -26,6 +26,10 @@ export type WarningCode =
 export interface Warning {
   code: WarningCode;
   message: string;
+  /** ANTOINE_RANGE only: the component the warning is about (used to keep one per component). */
+  component?: ComponentId;
+  /** ANTOINE_RANGE only: kelvin outside the Antoine range (the most extreme one is kept). */
+  excess_K?: number;
 }
 
 // ---- Solver inputs and results (shared by Simple and Advanced modes) ----

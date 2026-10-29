@@ -6,10 +6,11 @@
 // values synced, so a slider being dragged is never rebuilt under the pointer.
 // Slider input is batched: at most one store update (one solve) per frame.
 import { MIXTURES, type MixtureId, type MixturePreset } from '../../engine/mixtures';
+import { P_ATM_BAR } from '../../engine/balance';
 import { solve } from '../../engine/solve';
 import type { CondenserResult, ReboilerResult } from '../../engine/utilities';
 import type { Inputs, Results, SolveResult } from '../../engine/types';
-import { componentName, fmtKgh, fmtKW, fmtNum, fmtTempC, mixtureLabel } from '../format';
+import { componentName, fmtKgh, fmtKW, fmtNum, fmtRefluxOverMin, fmtTempC, mixtureLabel } from '../format';
 import { mountCharts } from '../charts/mount';
 import { setMixture, type Store } from '../state';
 import { h } from './dom';
@@ -21,6 +22,9 @@ export interface PanelOptions {
    */
   schedule?: (fn: () => void) => unknown;
 }
+
+/** Advanced P further than this from 1 atm gets an explicit pressure label in the Simple-vs-Advanced row. */
+const COMPARE_P_TOL_BAR = 0.01;
 
 type Edit = (i: Inputs) => Inputs;
 
@@ -313,7 +317,7 @@ export function mountPanel(root: HTMLElement, store: Store, opts: PanelOptions =
       cell('theoreticalTrays', 'Theoretical trays', String(shown.theoreticalTrays)),
       cell('actualTrays', 'Actual trays', String(shown.actualTrays), `at E_o = ${fmtNum(shownInputs.Eo, 2)}`),
       cell('feedTray', 'Feed tray', String(shown.feedTray), 'counted from the top'),
-      cell('Rmin', 'Minimum reflux Rmin', fmtNum(shown.Rmin, 2), `R/Rmin = ${fmtNum(Rshown / shown.Rmin, 2)}`),
+      cell('Rmin', 'Minimum reflux Rmin', fmtNum(shown.Rmin, 2), fmtRefluxOverMin(Rshown, shown.Rmin)),
       cell('Nmin', 'Nmin (total reflux)', fmtNum(shown.Nmin, 1)),
       cell('Qc', 'Condenser duty Qc', fmtKW(shown.Qc_kW)),
       cell('Qr', 'Reboiler duty Qr', fmtKW(shown.Qr_kW)),
@@ -331,12 +335,21 @@ export function mountPanel(root: HTMLElement, store: Store, opts: PanelOptions =
 
     if (result.ok && inputs.mode === 'advanced' && MIXTURES[inputs.mixtureId].simpleAllowed) {
       const simple = simpleCounterpart(result, inputs);
+      const simpleN = simple.ok ? simple.N : 'n/a';
+      // Simple always runs at 1 atm; say so when the Advanced pressure is not 1 atm.
+      const atOtherP = Math.abs(inputs.P_bar - P_ATM_BAR) > COMPARE_P_TOL_BAR;
       compareSlot.append(
         h(
           'div',
           { class: 'compare', 'data-role': 'compare' },
-          h('small', {}, 'Simple vs Advanced, same inputs'),
-          h('b', {}, `Simple N = ${simple.ok ? simple.N : 'n/a'} · Advanced N = ${result.N}`),
+          h('small', {}, atOtherP ? 'Simple vs Advanced, same inputs, but Simple runs at 1 atm' : 'Simple vs Advanced, same inputs'),
+          h(
+            'b',
+            {},
+            atOtherP
+              ? `Simple N (at 1 atm) = ${simpleN} · Advanced N (at ${+inputs.P_bar.toFixed(2)} bar abs) = ${result.N}`
+              : `Simple N = ${simpleN} · Advanced N = ${result.N}`,
+          ),
         ),
       );
     }

@@ -45,13 +45,31 @@ export function trayCounts(N: number, feedStage: number, Eo: number): { theoreti
   return { theoreticalTrays, actualTrays, feedTray: Math.min(ceil(feedStage / Eo), actualTrays) };
 }
 
-/** Drop exact duplicate warnings (same code and message), keeping the first. */
+/**
+ * Drop duplicate warnings, keeping the first position of each. Exact duplicates (same code and
+ * message) collapse to one. ANTOINE_RANGE warnings are raised once per evaluated temperature
+ * (top bubble, top dew, bottom bubble), so they collapse to one per component: the one furthest
+ * outside the Antoine range (largest excess_K), shown where that component first appeared.
+ */
 export function uniqueWarnings(ws: Warning[]): Warning[] {
+  const out: Warning[] = [];
   const seen = new Set<string>();
-  return ws.filter((w) => {
+  const byComponent = new Map<string, number>(); // component -> index in out
+  for (const w of ws) {
+    if (w.code === 'ANTOINE_RANGE' && w.component !== undefined) {
+      const i = byComponent.get(w.component);
+      if (i === undefined) {
+        byComponent.set(w.component, out.length);
+        out.push(w);
+      } else if ((w.excess_K ?? 0) > (out[i].excess_K ?? 0)) {
+        out[i] = w;
+      }
+      continue;
+    }
     const k = `${w.code}|${w.message}`;
-    if (seen.has(k)) return false;
+    if (seen.has(k)) continue;
     seen.add(k);
-    return true;
-  });
+    out.push(w);
+  }
+  return out;
 }

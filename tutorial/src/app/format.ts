@@ -17,6 +17,17 @@ export function fmtNum(v: number, dp = 0): string {
   return (FMT[dp] ?? grouped(dp)).format(v);
 }
 
+/** Shown instead of R/Rmin when Rmin is 0: any reflux, even R -> 0, reaches the separation. */
+export const RMIN_ZERO_TEXT = 'Rmin = 0 (any R separates)';
+/** Rmin at or below this counts as zero (rminPinch returns exactly 0 when R = 0 is feasible). */
+const RMIN_ZERO_EPS = 1e-9;
+
+/** "R/Rmin = 1.79", or RMIN_ZERO_TEXT when Rmin is 0 (the ratio would be infinite). */
+export function fmtRefluxOverMin(R: number, Rmin: number): string {
+  if (!(Rmin > RMIN_ZERO_EPS) || !Number.isFinite(R / Rmin)) return RMIN_ZERO_TEXT;
+  return `R/Rmin = ${fmtNum(R / Rmin, 2)}`;
+}
+
 /** Duty in kW: whole kW from 100 up, one decimal below, thousands separators. */
 export function fmtKW(kW: number): string {
   return `${fmtNum(kW, Math.abs(kW) >= 100 ? 0 : 1)} kW`;

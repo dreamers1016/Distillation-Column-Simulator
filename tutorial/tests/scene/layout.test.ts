@@ -10,7 +10,7 @@ import { solve } from '../../src/engine/solve';
 import type { Results } from '../../src/engine/types';
 import { CAMERA_FOV_DEG, VIEW_DIRECTION } from '../../src/scene/camera';
 import { FEED_TRAY_EMISSIVE } from '../../src/scene/geometry/trays';
-import { buildPlant, layoutColumn, FRAME_ASPECT, HIGHLIGHT_EMISSIVE, type PlantOptions } from '../../src/scene/plant';
+import { buildPlant, layoutColumn, FRAME_ASPECT, HIGHLIGHT_EMISSIVE, LAYOUT, type PlantOptions } from '../../src/scene/plant';
 
 const inputs = defaultInputs();
 const solved = solve(inputs);
@@ -268,7 +268,8 @@ describe('labels from Results', () => {
     const t = labels(p.group);
     expect(t).toContain('15 sieve trays');
     expect(t).toContain('Feed → tray 8');
-    expect(t.some((s) => /^Top ≈ \d/.test(s))).toBe(true); // Simple mode: estimate
+    expect(t.some((s) => /^Condensate ≈ \d/.test(s))).toBe(true); // Simple mode: estimate
+    expect(t.some((s) => /^Top /.test(s))).toBe(false); // the condensate bubble point is not tray 1
     expect(t.some((s) => /^Bottom ≈ \d/.test(s))).toBe(true);
     const kgD = Math.round(base.D_kgh).toLocaleString('en-US');
     const kgB = Math.round(base.B_kgh).toLocaleString('en-US');
@@ -287,7 +288,7 @@ describe('labels from Results', () => {
   it('Advanced temperatures have no "≈"', () => {
     const p = buildPlant({ ...withTrays(15, 8), mode: 'advanced', TtopIsEstimate: false }, opts());
     const t = labels(p.group);
-    expect(t.some((s) => /^Top \d/.test(s))).toBe(true);
+    expect(t.some((s) => /^Condensate \d/.test(s))).toBe(true);
     expect(t.some((s) => /^Bottom \d/.test(s))).toBe(true);
     p.dispose();
   });
@@ -466,5 +467,25 @@ describe('rebuild cost', () => {
     runs.sort((a, b) => a - b);
     console.info(`40-tray buildPlant (jsdom, no renderer): median ${runs[2].toFixed(1)} ms, min ${runs[0].toFixed(1)} ms`);
     expect(runs[2]).toBeLessThan(REBUILD_BUDGET_MS);
+  });
+});
+
+describe('condensate temperature pin', () => {
+  it('sits on the condensate line between the condenser and the reflux drum, not beside tray 1', () => {
+    const p = buildPlant(withTrays(15, 8), opts());
+    let pin: CSS2DObject | undefined;
+    p.group.traverse((o) => {
+      if (o instanceof CSS2DObject && /^Condensate /.test(o.element.textContent ?? '')) pin = o;
+    });
+    expect(pin).toBeDefined();
+    const L = p.layout;
+    const dY = L.yTop + LAYOUT.drumAboveTop;
+    const cY = dY + LAYOUT.condenserAboveDrum;
+    const pos = (pin as CSS2DObject).position;
+    expect(pos.y).toBeGreaterThan(dY);
+    expect(pos.y).toBeLessThan(cY);
+    expect(Math.abs(pos.x - LAYOUT.structureX)).toBeLessThan(2);
+    expect((pin as CSS2DObject).element.textContent).toBe(`Condensate ≈ ${base.Ttop_C.toFixed(1)} °C`);
+    p.dispose();
   });
 });

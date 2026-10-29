@@ -18,7 +18,7 @@ import { STEAM_LEVELS, steamSat } from '../../engine/steam';
 import type { CondenserResult, ReboilerResult } from '../../engine/utilities';
 import type { Inputs, Results } from '../../engine/types';
 import type { PartRef } from '../state';
-import { componentName, fmtKgh, fmtKW, fmtNum, fmtTempC, mixtureLabel } from '../format';
+import { componentName, fmtKgh, fmtKW, fmtNum, fmtRefluxOverMin, fmtTempC, mixtureLabel } from '../format';
 
 export type CardKind = PartRef['kind'];
 
@@ -389,7 +389,7 @@ function distributor(c: CardCtx): Card {
     ],
     live: [
       ['Reflux L', `${kmol(r.L)} ≈ ${fmtKgh(r.L * avgMW(r.mixture, inputs.xD))}`],
-      ['Reflux ratio', `R = ${fmtNum(R, 2)} (R/Rmin = ${fmtNum(R / r.Rmin, 2)})`],
+      ['Reflux ratio', `R = ${fmtNum(R, 2)} · ${fmtRefluxOverMin(R, r.Rmin)}`],
       ['Reflux composition', `x_D = ${frac(inputs.xD)} ${n.light}`],
       ['Reflux temperature', `${temp(r, r.Ttop_C)} (saturated liquid)`],
     ],
@@ -544,8 +544,8 @@ function refluxDrum(c: CardCtx): Card {
       String.raw`\dfrac{R_{min}}{R_{min}+1} = \dfrac{x_D - y_p}{x_D - x_p}`,
     ],
     live: [
-      ['Reflux ratio', `R = ${fmtNum(R, 2)} · R/Rmin = ${fmtNum(R / r.Rmin, 2)}`],
-      ['Minimum reflux Rmin', `${fmtNum(r.Rmin, 2)}: ${PINCH_LABEL[r.pinch]}`],
+      ['Reflux ratio', `R = ${fmtNum(R, 2)} · ${fmtRefluxOverMin(R, r.Rmin)}`],
+      ['Minimum reflux Rmin', r.Rmin > 0 ? `${fmtNum(r.Rmin, 2)}: ${PINCH_LABEL[r.pinch]}` : 'none: the operating lines clear the equilibrium curve even at R → 0'],
       ['Reflux L / distillate D', `${kmol(r.L)} / ${kmol(r.D_kmolh)}`],
       ['Distillate', `${fmtKgh(r.D_kgh)} at x_D = ${frac(inputs.xD)} ${n.light}`],
       ['Vapour to condenser V', kmol(r.V)],

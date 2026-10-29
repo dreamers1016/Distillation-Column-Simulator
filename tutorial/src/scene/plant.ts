@@ -268,7 +268,12 @@ export function buildPlant(r: Results, opts: PlantOptions): Plant {
   const heavy = componentName(r.mixture.heavy);
   const lastTrayY = L.trayY[L.displayTrays - 1];
   pin(trayCountLabel(L), v3(-1.9, L.yTop - 0.2, 0), { kind: 'column' });
-  pin(`Top ${fmtTempC(r.Ttop_C, estimate)}`, v3(-1.75, L.trayY[0] - 0.25, 0));
+  // The condensate (reflux and distillate) bubble point, so it sits on the condensate line from
+  // the condenser to the reflux drum; beside tray 1 it read as the tray 1 temperature, which is
+  // hotter (tray 1's liquid is leaner than xD).
+  const condOut = cp('condensateOut');
+  const drumIn = dp('condensateIn');
+  pin(`Condensate ${fmtTempC(r.Ttop_C, estimate)}`, v3(condOut.x + 1.25, (condOut.y + drumIn.y) / 2, 0));
   pin(`Bottom ${fmtTempC(r.Tbot_C, estimate)}`, v3(-1.75, Math.min(lastTrayY - 0.6, L.y0 + 0.2), 0));
   pin(`Feed → tray ${r.feedTray}`, feed.labelAt, { kind: 'feed' });
   pin('Condenser', v3(sx, cY + 0.9, 0.7), { kind: 'condenser' });

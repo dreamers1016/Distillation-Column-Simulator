@@ -57,15 +57,22 @@ function rangeWarnings(mix: MixturePreset, T_K: number): Warning[] {
   const out: Warning[] = [];
   for (const id of [mix.light, mix.heavy] as ComponentId[]) {
     const { name, Tc_K, antoine } = COMPONENTS[id];
+    // excess_K ranks the warnings of one component (uniqueWarnings keeps the largest): T >= Tc
+    // is always above Tmax, so the critical warning outranks any in-range-of-Tc one.
+    const excess_K = T_K < antoine.Tmin_K ? antoine.Tmin_K - T_K : T_K - antoine.Tmax_K;
     if (T_K >= Tc_K) {
       out.push({
         code: 'ANTOINE_RANGE',
         message: `${name} above its critical temperature (Tc = ${Tc_K} K) — vapour pressure extrapolated, results approximate`,
+        component: id,
+        excess_K,
       });
     } else if (T_K < antoine.Tmin_K - ANTOINE_TOL_K || T_K > antoine.Tmax_K + ANTOINE_TOL_K) {
       out.push({
         code: 'ANTOINE_RANGE',
         message: `${name} vapour pressure evaluated at ${T_K.toFixed(1)} K, outside its Antoine range ${antoine.Tmin_K}-${antoine.Tmax_K} K; treat results as approximate.`,
+        component: id,
+        excess_K,
       });
     }
   }

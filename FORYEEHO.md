@@ -507,8 +507,8 @@ close to the feed stage. Default numbers (methanol–water, Advanced, E_o 0.7, 8
 1 = stage 1 at 66.5 °C, feed tray 6 at s ≈ 3.86 reads 78.1 °C against the feed stage 4 at
 79.0 °C, and tray 8 = stage 5 at 90.6 °C, below the reboiler's 92.5 °C (bug 6.2.17).
 
-A good lecture talking point: tray 1 shows 66.5 °C, but the "Top" label shows 65.3 °C.
-The label is the bubble point of the condensate at xD = 0.95, while tray 1's liquid is leaner
+A good lecture talking point: tray 1 shows 66.5 °C, but the "Condensate 65.3 °C" pin on the
+line from the condenser to the reflux drum is cooler. The pin is the bubble point of the condensate at xD = 0.95, while tray 1's liquid is leaner
 (x ≈ 0.88; its *vapour* is the one at xD) and therefore hotter.
 
 ### 5.6 Minimum reflux: the pinch method, and why Underwood is not enough
@@ -582,7 +582,7 @@ the spec's 0.2 % tolerance. The three steam headers:
 
 | Level | Gauge pressure | Tsat (from the app's IF97 table interpolation) |
 |---|---|---|
-| LP | 3.5 barg | ≈ 148.1 °C (true IF97 ≈ 147.9 °C) |
+| LP | 3.5 barg | ≈ 148.1 °C (true IF97 ≈ 148.0 °C at 4.513 bar abs) |
 | MP | 10 barg | ≈ 184.2 °C (true IF97 ≈ 184.1 °C) |
 | HP | 40 barg | ≈ 251.9 °C (true IF97 ≈ 251.8 °C) |
 
@@ -1143,8 +1143,9 @@ These are recorded in the ledger. None of them affects the engine's validated nu
   final review: s = 1 + (k − 1)(N − 2)/(A − 1), so tray k = stage k at E_o = 1 (6.2.17).
 - Step 6 says "only 1.3 × Rmin" while step 7 calls 1.2–1.5 × Rmin the optimum. A note
   ("near-optimal but sensitive") would reconcile them.
-- Tray 1 at 67.1 °C against the "Top 65.3 °C" label: explained in 5.5, and best used as a
-  lecture talking point.
+- ~~Tray 1 against the "Top 65.3 °C" label.~~ Fixed in the final review: the pin is now
+  "Condensate 65.3 °C" ("≈" in Simple) on the condensate line beside the condenser, so it
+  no longer reads as the tray 1 temperature (66.5 °C). Still a good talking point (5.5).
 
 **Data attribution**
 - MW, Tb, Tc, λ and cp are attributed generally to "Poling Appendix A / NIST". cpL at
@@ -1155,13 +1156,35 @@ These are recorded in the ledger. None of them affects the engine's validated nu
 - No published textbook worked example is reproduced in the McCabe-Thiele tests (section 7).
 - The tangent-stripping pinch branch is untested, because no real case was found.
 - Orbit-control damping is still per-frame.
-- The `curve.ts` header still says "400-interval" (the nodes are now Chebyshev-packed).
-- The fuzz test takes 20–45 s of the roughly 50 s suite.
+- ~~The `curve.ts` header still says "400-interval".~~ Fixed: it describes the 401
+  Chebyshev-packed nodes.
+- The fuzz test takes 20–48 s of the roughly 50 s suite. Its timeout is now 240 s (it
+  once took 48 s against the old 120 s under parallel load); N stays at 2,000.
 
 **Cosmetic**
 - Task 2's commit trailer names the actual implementer model ("Claude Haiku 5.5"),
   accepted without rewriting history.
 
+
+### Smaller fixes from the final review
+
+- **One Antoine warning per component.** Range warnings were raised once per evaluated
+  temperature (top bubble point, top dew point, bottom bubble point), so methanol–water at
+  25 bar listed six near-identical lines. `uniqueWarnings` now keeps one per component, the
+  one furthest outside the Antoine range (484.5 K for both at 25 bar).
+- **Rmin = 0.** For some valid inputs (methanol–water Simple, q 0.2, xF 0.97, xD 0.98) even
+  R → 0 separates, so Rmin = 0 and R/Rmin printed "∞". The panel and the distributor and
+  reflux-drum cards now say "Rmin = 0 (any R separates)" and omit the ratio.
+- **Simple vs Advanced at another pressure.** Simple always runs at 1 atm, so "same inputs"
+  was untrue when the Advanced pressure differed. The row now reads "Simple N (at 1 atm) = …
+  · Advanced N (at P bar abs) = …" whenever P is more than 0.01 bar from 1 atm.
+- **Store re-entrancy.** A subscriber that calls `store.set` starts a nested notification
+  pass. The review described the remaining outer subscribers as getting a stale state; a
+  test showed they actually received the current state (the arguments are read when each
+  call is made) but were notified *twice*. A generation counter now ends the outer pass
+  once a nested pass has run, so each subscriber hears the newest state exactly once.
+  *Lesson:* verify a reported mechanism with a test before fixing it; here the symptom was
+  real but different from the description.
 ---
 
 ## 11. Appendix: commit history
