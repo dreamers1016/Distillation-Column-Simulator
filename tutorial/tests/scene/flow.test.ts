@@ -47,8 +47,14 @@ describe('compositionAtHeight', () => {
       expect(compositionAtHeight(L, r, L.y0 + 0.3, 'x')).toBeLessThanOrEqual(0.1);
       // The decks themselves: the top tray is rich, the bottom tray lean (tray 1 is below xD).
       expect(compositionAtHeight(L, r, L.trayY[0], 'x')).toBeGreaterThanOrEqual(0.7);
-      expect(compositionAtHeight(L, r, L.trayY[L.displayTrays - 1], 'x')).toBeLessThanOrEqual(0.1);
-      expect(compositionAtHeight(L, r, L.trayY[L.displayTrays - 1], 'y')).toBeLessThanOrEqual(0.3);
+      // The bottom deck is the last theoretical tray, stage N-1 (the partial reboiler is stage N):
+      // methanol-water x = 0.068 (Advanced) and 0.141 (Simple), still mostly water.
+      const yBot = L.trayY[L.displayTrays - 1];
+      const lastTray = r.stages[r.N - 2];
+      expect(compositionAtHeight(L, r, yBot, 'x')).toBeCloseTo(lastTray.x, 9);
+      expect(compositionAtHeight(L, r, yBot, 'y')).toBeCloseTo(lastTray.y, 9);
+      expect(compositionAtHeight(L, r, yBot, 'x')).toBeLessThanOrEqual(0.15);
+      expect(compositionAtHeight(L, r, yBot, 'y')).toBeLessThanOrEqual(0.45);
     });
   }
 

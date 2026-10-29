@@ -14,10 +14,11 @@
 //
 // Colour = lerp(heavy, light, composition): liquid uses x, vapour uses y, read at the
 // particle's height. Advanced: per-actual-tray trayProfile. Simple (trayProfile null): the
-// theoretical stages are mapped to actual trays with the engine's own formula
-// s = 1 + (k - 0.5)(N - 1)/actualTrays and linear interpolation of x and y in s (engine/profile.ts),
-// with stage N's node replaced by the reboiler state x = xB, y = y*(xB): the stepped last stage
-// overshoots below xB and the bottom of the column must end at the bottoms composition.
+// actual trays span the theoretical trays (stages 1...N-1) with the engine's own formula
+// s = 1 + (k - 1)(N - 2)/(actualTrays - 1) and linear interpolation of x and y in s
+// (engine/profile.ts; at E_o = 1 tray k is stage k), with stage N's node replaced by the reboiler
+// state x = xB, y = y*(xB): the stepped last stage overshoots below xB and the bottom of the
+// column must end at the bottoms composition.
 // Between two drawn decks the composition is linear in height; the ends are anchored at the
 // real stream compositions (reflux / overhead vapour = xD, sump liquid = xB).
 import { BufferAttribute, BufferGeometry, Color, DataTexture, LinearFilter, Points, PointsMaterial, RGBAFormat } from 'three';

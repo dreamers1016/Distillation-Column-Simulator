@@ -495,9 +495,21 @@ exactly this.
 
 **Tray temperatures (Advanced).** Each stage temperature is the bubble point of its liquid
 xₙ. Actual trays are interpolated between theoretical stages, and the tray card says
-"interpolated". A good lecture talking point: in the default case, tray 1 shows 67.1 °C,
-but the "Top" label shows 65.3 °C. The top label is the bubble point of the condensate at
-xD = 0.95, while tray 1's liquid is leaner (x ≈ 0.84) and therefore hotter.
+"interpolated". The mapping (`engine/profile.ts`) spreads the A actual trays over the
+theoretical trays, stages 1…N−1, end to end:
+
+  s(k) = 1 + (k − 1)(N − 2)/(A − 1)   (s = 1 when A = 1)
+
+so tray 1 is stage 1, the bottom tray is stage N−1 (the partial reboiler, stage N, holds no
+tray), and at E_o = 1 tray k *is* stage k. This is the same numbering `balance.ts` uses for
+the tray count ⌈(N − 1)/E_o⌉ and the feed tray ⌈feed stage/E_o⌉, so the feed tray reads
+close to the feed stage. Default numbers (methanol–water, Advanced, E_o 0.7, 8 trays): tray
+1 = stage 1 at 66.5 °C, feed tray 6 at s ≈ 3.86 reads 78.1 °C against the feed stage 4 at
+79.0 °C, and tray 8 = stage 5 at 90.6 °C, below the reboiler's 92.5 °C (bug 6.2.17).
+
+A good lecture talking point: tray 1 shows 66.5 °C, but the "Top" label shows 65.3 °C.
+The label is the bubble point of the condensate at xD = 0.95, while tray 1's liquid is leaner
+(x ≈ 0.88; its *vapour* is the one at xD) and therefore hotter.
 
 ### 5.6 Minimum reflux: the pinch method, and why Underwood is not enough
 
@@ -867,9 +879,10 @@ symptom, the root cause, the fix and the lesson.
   overshoot point.
 - *Fix:* for interpolation, the reboiler node is taken as the actual bottoms state:
   x = xB, y = y\*(xB), T = Tbub(xB). Trays map onto stages 1…N−1 plus the reboiler, so the
-  profile is monotone and bounded by [xB, xD]. Tray 8 now reads x = 0.056 at 91.9 °C. The
-  same fix corrected the Simple-mode particle colours, which shared the bug through the
-  sump colour.
+  profile is monotone and bounded by [xB, xD]. Tray 8 then read x = 0.056 at 91.9 °C (with
+  the midpoint mapping of the time; since 6.2.17 it is stage 5 itself, x = 0.068 at
+  90.6 °C). The same fix corrected the Simple-mode particle colours, which shared the bug
+  through the sump colour.
 - *Lesson:* a construction artefact (the overshoot of the fractional last step) must not
   leak into displayed physical quantities. Bound-check every displayed profile against
   the material balance.
@@ -913,6 +926,24 @@ symptom, the root cause, the fix and the lesson.
   result.
 - *Lesson:* write guards so that the *unknown* case fails safe, like a fail-closed valve.
 
+**6.2.17 Tray numbering half a stage off the model's own stage numbering (final review)**
+- *Symptom:* at E_o = 1, where tray k should simply be stage k, tray 1 showed x = 0.811 at
+  67.5 °C against stage 1 at x = 0.876, 66.5 °C, and the feed tray 4 showed 84.8 °C against
+  the feed stage at 79.0 °C. At the default E_o = 0.7 the projected step-8 caption read
+  "tray 6 (feed): 84.1 °C" while the theoretical feed stage is at 79.0 °C.
+- *Root cause:* two conventions were mixed. `balance.ts` numbers trays as ⌈stage/E_o⌉ (tray
+  k ↔ stage k at E_o = 1), but the profile placed tray k at the *midpoint*
+  s = 1 + (k − 0.5)(N − 1)/A, spread over stages 1…N including the reboiler. Every tray sat
+  about half a stage too low, so the feed tray read a temperature from the stripping
+  section.
+- *Fix:* map the trays end to end onto stages 1…N−1, s = 1 + (k − 1)(N − 2)/(A − 1). Tests
+  now require trayProfile[k−1] = stages[k−1] to 1e-9 at E_o = 1 and the default feed tray
+  within 1.5 °C of the feed stage (78.1 against 79.0 °C), on top of the old monotone,
+  bounded and "no tray hotter than the reboiler" properties.
+- *Lesson:* when two modules index the same physical object (here "tray k"), write down one
+  convention and test the identity case (E_o = 1) where the answer is known exactly. Each
+  module was self-consistent; only the identity test exposes the mismatch.
+
 **Smaller items worth knowing**
 - *The azeotrope message prints three decimals.* The model azeotrope is x = 0.8954.
   Rounded to two decimals that is "0.90", which would contradict the literature 0.89
@@ -921,7 +952,7 @@ symptom, the root cause, the fix and the lesson.
   `offsetParent` is null, so the plant sat hidden under the panel until the code used the
   element's bounding rectangle instead.
 - *Wrong assumptions inside tests.* Task 11's plan said "top tray x ≥ 0.85". Physically,
-  tray 1's liquid is leaner than xD (0.835), so the plan's assertion was wrong. The test
+  tray 1's liquid is leaner than xD (0.835 then; 0.876 since 6.2.17, Advanced, still below 0.95), so the plan's assertion was wrong. The test
   now checks the reflux (= xD) instead.
 
 ---
@@ -1105,9 +1136,8 @@ These are recorded in the ledger. None of them affects the engine's validated nu
 **Teaching content**
 - Ethanol–water Advanced defaults put the feed on the bottom stage ("Feed → tray 13 of 13").
   Consider different defaults or wording.
-- The tray↔stage mapping convention: tray k sits at s = 1 + (k − 0.5)(N − 1)/A, a midpoint
-  convention. With E_o = 1, tray 1 never shows stage 1 exactly. Either document it or change
-  it.
+- ~~The tray↔stage mapping convention (midpoint s = 1 + (k − 0.5)(N − 1)/A).~~ Fixed in the
+  final review: s = 1 + (k − 1)(N − 2)/(A − 1), so tray k = stage k at E_o = 1 (6.2.17).
 - Step 6 says "only 1.3 × Rmin" while step 7 calls 1.2–1.5 × Rmin the optimum. A note
   ("near-optimal but sensitive") would reconcile them.
 - Tray 1 at 67.1 °C against the "Top 65.3 °C" label: explained in 5.5, and best used as a

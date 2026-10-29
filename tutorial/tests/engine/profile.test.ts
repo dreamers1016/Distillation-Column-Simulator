@@ -2,6 +2,8 @@
 // Advanced trayProfile and the Simple-mode flow colours. Hand-built nodes, no solver.
 import { describe, it, expect } from 'vitest';
 import { interpolateTray, profileNodes, type ProfileNode } from '../../src/engine/profile';
+import { defaultInputs } from '../../src/app/state';
+import { solve } from '../../src/engine/solve';
 
 const xD = 0.95;
 const xB = 0.05;
@@ -73,12 +75,64 @@ describe.each(Object.entries(cases))('interpolateTray, %s', (_name, stages) => {
     expect(prof[prof.length - 1].x).toBeGreaterThanOrEqual(xB);
   });
 
-  it('E_o = 1: tray k sits at stage k + 1/2 (midway between the bracketing nodes)', () => {
+  it('E_o = 1: tray k is stage k exactly (trays map onto stages 1..N-1; stage N is the reboiler)', () => {
     const trays = stages.length - 1;
     for (let k = 1; k <= trays; k++) {
       const p = interpolateTray(nodes, k, trays);
-      expect(p.x).toBeCloseTo((nodes[k - 1].x + nodes[k].x) / 2, 12);
+      expect(p.x).toBeCloseTo(nodes[k - 1].x, 12);
+      expect(p.y).toBeCloseTo(nodes[k - 1].y, 12);
+      expect(p.T_C as number).toBeCloseTo(nodes[k - 1].T_C as number, 12);
     }
+  });
+
+  it('tray 1 is stage 1 and the last tray is stage N-1 at every E_o (no tray sits in the reboiler)', () => {
+    for (const Eo of [1, 0.7, 0.4]) {
+      const trays = traysAt(stages.length, Eo);
+      expect(interpolateTray(nodes, 1, trays).x).toBeCloseTo(nodes[0].x, 12);
+      expect(interpolateTray(nodes, trays, trays).x).toBeCloseTo(nodes[Math.max(0, nodes.length - 2)].x, 12);
+    }
+  });
+});
+
+describe('solved Advanced methanol-water default: trays use the model own stage numbering', () => {
+  const adv = (Eo: number) => {
+    const r = solve({ ...defaultInputs(), mode: 'advanced', mixtureId: 'methanol-water', Eo });
+    if (!r.ok) throw new Error(`must solve: ${r.error.message}`);
+    return r;
+  };
+
+  it('E_o = 1: trayProfile[k-1] equals stages[k-1] (x, y, T within 1e-9) for every tray', () => {
+    const r = adv(1);
+    const prof = r.trayProfile ?? [];
+    expect(prof).toHaveLength(r.N - 1);
+    expect(r.feedTray).toBe(r.feedStage);
+    prof.forEach((p, i) => {
+      const s = r.stages[i];
+      expect(Math.abs(p.x - s.x)).toBeLessThan(1e-9);
+      expect(Math.abs(p.y - s.y)).toBeLessThan(1e-9);
+      expect(Math.abs(p.T_C - (s.T_C as number))).toBeLessThan(1e-9);
+    });
+  });
+
+  it('default E_o = 0.7: the feed tray T is within 1.5 °C of the feed stage T', () => {
+    const r = adv(0.7);
+    const prof = r.trayProfile ?? [];
+    expect(Math.abs(prof[r.feedTray - 1].T_C - (r.stages[r.feedStage - 1].T_C as number))).toBeLessThanOrEqual(1.5);
+  });
+
+  it.each([1, 0.7, 0.4])('E_o = %s: monotone, bounded in [xB, xD], last tray no hotter than the reboiler', (Eo) => {
+    const r = adv(Eo);
+    const prof = r.trayProfile ?? [];
+    const xD = r.stages[0].y;
+    for (const p of prof) {
+      expect(p.x).toBeGreaterThanOrEqual(r.xB);
+      expect(p.x).toBeLessThanOrEqual(xD);
+    }
+    for (let k = 1; k < prof.length; k++) {
+      expect(prof[k].x).toBeLessThanOrEqual(prof[k - 1].x);
+      expect(prof[k].T_C).toBeGreaterThanOrEqual(prof[k - 1].T_C);
+    }
+    expect(prof[prof.length - 1].T_C).toBeLessThanOrEqual(r.Tbot_C);
   });
 });
 

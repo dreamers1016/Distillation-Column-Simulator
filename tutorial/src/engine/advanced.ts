@@ -147,11 +147,12 @@ export function solveAdvanced(inputs: Inputs, options: AdvancedOptions = {}): So
   const topVapour = dewPoint(mix, xD, P); // top vapour (y = xD) at its dew point
   const bot = bubblePoint(mix, xB, P);
 
-  // Tray profile: actual tray k sits at stage index s = 1 + (k - 0.5)(N - 1)/actualTrays,
-  // linearly interpolated in stage index (the card states it is interpolated). Stage N is the
-  // partial reboiler whose liquid is the bottoms product, so for interpolation its node is the
-  // reboiler state (x = xB, y = y*(xB), T = Tbub(xB)), not the overshooting stepped x_N
-  // (see ./profile.ts). `stages` above stays exactly as stepped.
+  // Tray profile: the actual trays span the theoretical trays, stages 1...N-1, at stage index
+  // s = 1 + (k - 1)(N - 2)/(actualTrays - 1), linearly interpolated in stage index (the card
+  // states it is interpolated); at E_o = 1 tray k is stage k. Stage N is the partial reboiler
+  // whose liquid is the bottoms product, so its node is the reboiler state (x = xB, y = y*(xB),
+  // T = Tbub(xB)), not the overshooting stepped x_N (see ./profile.ts). `stages` above stays
+  // exactly as stepped.
   const yB = curve.yStar(xB);
   const nodes = profileNodes(stages, { x: xB, y: yB, T_C: bot.T_K - K0 });
   const trayProfile = Array.from({ length: trays.actualTrays }, (_, i) => {

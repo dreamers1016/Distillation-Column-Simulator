@@ -88,6 +88,8 @@ describe('v1 lecture script', () => {
     expect(text).toMatch(/interpolated/);
     // the profile ends at the bottoms composition: no tray is hotter than the reboiler it feeds
     for (const q of p) expect(q.T_C).toBeLessThanOrEqual(r.Tbot_C + 1e-6);
+    // the feed tray reads close to the theoretical feed stage it stands for (same stage numbering)
+    expect(Math.abs(p[r.feedTray - 1].T_C - (r.stages[r.feedStage - 1].T_C as number))).toBeLessThanOrEqual(1.5);
   });
 
   it('step 9 offers the inputs of the current mode: feed temperature in Advanced, q in Simple', () => {

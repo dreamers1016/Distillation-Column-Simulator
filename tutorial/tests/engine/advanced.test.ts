@@ -147,11 +147,13 @@ describe('Advanced tray profile ends at the bottoms composition (no overshoot)',
     });
   }
 
-  it('methanol-water: the last tray lies strictly between xB and the liquid of stage N-1', () => {
+  it('methanol-water: the last tray is the last theoretical tray, stage N-1, richer than xB (never the overshoot)', () => {
     const r = meoh();
     const last = r.trayProfile![r.trayProfile!.length - 1];
     expect(last.x).toBeGreaterThan(0.05);
-    expect(last.x).toBeLessThan(r.stages[r.N - 2].x);
+    expect(last.x).toBeCloseTo(r.stages[r.N - 2].x, 12);
+    expect(last.T_C).toBeCloseTo(r.stages[r.N - 2].T_C as number, 12);
+    expect(last.T_C).toBeLessThan(r.Tbot_C);
   });
   it('methanol-water: `stages` is unchanged (last stepped x ≈ 0.0100, past xB) and Tbot is the bubble T of xB', () => {
     const r = meoh();
