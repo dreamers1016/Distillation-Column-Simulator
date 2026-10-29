@@ -16,7 +16,7 @@ The legacy 2D simulator (`../index.html`) is unchanged and is not part of this b
 
 ## Requirements
 
-- Node.js 20 or newer (developed on Node 25.6.1) and npm.
+- Node.js 20 or newer (developed and tested on Node 24+) and npm.
 - No network access is needed at run time: Three.js, KaTeX and the KaTeX fonts
   are bundled, and the UI text uses the system font stack. The built site works
   offline and from any static host.
@@ -60,7 +60,7 @@ repository root also holds the legacy `index.html`. `vite.config.ts` uses
 | Mixture | Model | Simple mode | Advanced mode | Status |
 |---|---|---|---|---|
 | Methanol-water | NRTL | yes (α = 4.3011) | yes | verified against Perry's T-x data (bubble-point MAE 0.12 °C) |
-| Ethanol-water | NRTL | no (azeotrope) | yes | verified against Carey and Lewis (1932) (MAE 0.24 °C); model azeotrope x 0.895, 78.1 °C (lit. 0.89, 78.2 °C) |
+| Ethanol-water | NRTL | no (azeotrope) | yes | verified against Carey and Lewis (1932) (MAE 0.24 °C); model azeotrope x 0.895, 78.15 °C (lit. 0.89, 78.2 °C) |
 | Benzene-toluene | ideal | yes (α = 2.4744) | yes | ideal solution |
 | n-Hexane-n-heptane | ideal | yes (α = 2.4746) | yes | ideal solution |
 | Methanol-ethanol | ideal | yes (α = 1.7232) | yes | ideal solution |
@@ -81,7 +81,7 @@ points at 1 atm to `tests/engine/vle.test.ts`, check the bubble-point error, and
   log10(P/bar) = A − B/(T/K + C), each with its NIST validity range. Rows used:
   water (Bridgeman and Aldrich 1964), methanol and ethanol (Ambrose and Sprake 1970),
   isopropanol (Biddiscombe et al. 1963), acetone (Ambrose, Sprake et al. 1974),
-  benzene, toluene, n-hexane and n-heptane (Williamham, Taylor et al. 1945),
+  benzene, toluene, n-hexane and n-heptane (Willingham, Taylor et al. 1945),
   propane (Helgeson and Sage 1967), n-butane (Das, Reed et al. 1973).
   Per-component URLs are in `src/engine/components.ts`.
 - **Pure-component properties (MW, Tb, Tc, λ at Tb, liquid and vapour cp):**

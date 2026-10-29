@@ -77,16 +77,16 @@ export const COMPONENTS: Record<ComponentId, ComponentData> = {
   benzene: {
     name: 'Benzene', MW: 78.11, Tb_K: 353.2, Tc_K: 562.0, lambdaTb_kJmol: 30.72,
     cpL_JmolK: 136.0, cpV_JmolK: 82.4,
-    // NIST: Williamham, Taylor et al. 1945, 287.70-354.07 K
+    // NIST: Willingham, Taylor et al. 1945, 287.70-354.07 K
     antoine: { A: 4.01814, B: 1203.835, C: -53.226, Tmin_K: 287.7, Tmax_K: 354.07 },
-    sources: `Antoine: ${NIST}C71432 (Williamham et al. 1945); ${OTHER}`,
+    sources: `Antoine: ${NIST}C71432 (Willingham et al. 1945); ${OTHER}`,
   },
   toluene: {
     name: 'Toluene', MW: 92.14, Tb_K: 383.8, Tc_K: 591.8, lambdaTb_kJmol: 33.18,
     cpL_JmolK: 157.0, cpV_JmolK: 103.6,
-    // NIST: Williamham, Taylor et al. 1945, 308.52-384.66 K
+    // NIST: Willingham, Taylor et al. 1945, 308.52-384.66 K
     antoine: { A: 4.07827, B: 1343.943, C: -53.773, Tmin_K: 308.52, Tmax_K: 384.66 },
-    sources: `Antoine: ${NIST}C108883 (Williamham et al. 1945); ${OTHER}`,
+    sources: `Antoine: ${NIST}C108883 (Willingham et al. 1945); ${OTHER}`,
   },
   propane: {
     name: 'Propane', MW: 44.1, Tb_K: 231.1, Tc_K: 369.8, lambdaTb_kJmol: 19.04,
@@ -107,15 +107,15 @@ export const COMPONENTS: Record<ComponentId, ComponentData> = {
   nHexane: {
     name: 'n-Hexane', MW: 86.18, Tb_K: 341.9, Tc_K: 507.6, lambdaTb_kJmol: 28.85,
     cpL_JmolK: 195.6, cpV_JmolK: 143.0,
-    // NIST: Williamham, Taylor et al. 1945, 286.18-342.69 K
+    // NIST: Willingham, Taylor et al. 1945, 286.18-342.69 K
     antoine: { A: 4.00266, B: 1171.53, C: -48.784, Tmin_K: 286.18, Tmax_K: 342.69 },
-    sources: `Antoine: ${NIST}C110543 (Williamham et al. 1945); ${OTHER}`,
+    sources: `Antoine: ${NIST}C110543 (Willingham et al. 1945); ${OTHER}`,
   },
   nHeptane: {
     name: 'n-Heptane', MW: 100.2, Tb_K: 371.6, Tc_K: 540.2, lambdaTb_kJmol: 31.77,
     cpL_JmolK: 224.6, cpV_JmolK: 166.0,
-    // NIST: Williamham, Taylor et al. 1945, 299.07-372.43 K
+    // NIST: Willingham, Taylor et al. 1945, 299.07-372.43 K
     antoine: { A: 4.02832, B: 1268.636, C: -56.199, Tmin_K: 299.07, Tmax_K: 372.43 },
-    sources: `Antoine: ${NIST}C142825 (Williamham et al. 1945); ${OTHER}`,
+    sources: `Antoine: ${NIST}C142825 (Willingham et al. 1945); ${OTHER}`,
   },
 };

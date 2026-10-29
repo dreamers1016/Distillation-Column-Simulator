@@ -63,8 +63,8 @@ There are two real users, and every design decision serves one of them:
 
 Your bar, from the spec: *all thermodynamic models, calculations, and mass and energy
 balances must be correct*, because a wrong number in front of a class is a
-credibility failure. That bar shaped the whole build. Roughly half the work went into
-proving the numbers rather than drawing the plant.
+credibility failure. That bar shaped the whole build: a large share of the work went into
+proving the numbers, not only drawing the plant.
 
 ### Two independent switches
 
@@ -322,7 +322,7 @@ There are 21 test files and 464 tests. All passed on 2026-10-29.
 | **Procedural geometry** (built in code) instead of a CAD model | Every shell, tray, nozzle and pipe is generated from numbers. | A CAD or glTF model is fixed: it cannot grow from 6 to 40 trays, move the feed tray or change its utility piping when the calculation changes. Procedural geometry makes the 3D model a *view of the calculation*. It also has no model files to license, download or keep in sync. The cost is more code (`geometry/` is about 1,300 lines). |
 | **KaTeX 0.16** | Renders the card equations. | It is fast and synchronous (no flicker), and its fonts can be bundled. MathJax is heavier. |
 | **Hand-written SVG charts** | McCabe-Thiele and profile charts. | Two charts do not justify a charting library. SVG is crisp on a projector at any size, and the chart is drawn from the engine's own stages, so it cannot disagree with the numbers. |
-| **Plain DOM, no framework** (no React or Vue) | The panel, cards and presenter are built with small helper functions. | The UI is modest, and a store with `subscribe()` is enough. A framework adds build complexity, version churn and a second "state" system. Text goes in through `textContent`, never as markup, which also closes off script-injection mistakes. |
+| **Plain DOM, no framework** (no React or Vue) | The panel, cards and presenter are built with small helper functions. | The UI is modest, and a store with `subscribe()` is enough. A framework adds build complexity, version churn and a second "state" system. Data-driven text goes in as text nodes; the only `innerHTML` is static labels (slider names with subscripts) and KaTeX's own output. That closes off script-injection mistakes from live values. |
 | **Vitest + jsdom** | The test runner, with a simulated browser page for UI tests. | Vitest uses Vite's own configuration and runs TypeScript directly. jsdom lets the panel, cards and lecture be tested without a real browser. Engine tests run in plain Node. |
 | **vite-node** | Runs `scripts/derive-simple-alpha.ts`. | It ships with Vitest, so no new dependency was needed. |
 | **Bundled, no CDN** | Three.js, KaTeX and the KaTeX fonts are all inside `dist/`. UI text uses system fonts. | Lecture halls often have poor Wi-Fi. A page that fetches libraries from the internet at run time can fail in the middle of a lecture. This one works offline once loaded, and from any static host. |
@@ -354,7 +354,8 @@ its fitted range it can drift without warning. Two real cases from this build:
 - **Propane at 1 atm.** Propane's NIST set covers 277.6–360.8 K. Its 1-atm boiling point
   is 231.1 K, far outside that range. At 1 atm the set misses the boiling point by
   about 2.3 °C, which was checked during the design. That is one reason propane–butane
-  runs at 18 bar abs, where the column sits inside the range.
+  runs at 18 bar abs, where the condenser end sits inside the range (the bottoms still
+  exceed it, see below).
 - **Mild extrapolation is often fine.** Benzene's set, extrapolated to 381.5 K (the
   benzene–toluene bottoms), gives 2.24 bar against about 2.26 bar real. Warning on every
   default benzene–toluene run would be a false alarm.
@@ -407,7 +408,7 @@ Ideal Raoult is about **10 °C too hot** in the dilute region, which is exactly 
 bottom of an ethanol column operates. It also predicts no azeotrope at all, since its
 y\*(x) never crosses y = x. NRTL reproduces the measurements: the bubble-point mean
 absolute error is 0.24 °C for ethanol–water and 0.12 °C for methanol–water, and the
-model azeotrope is x = 0.895 at 78.1 °C (literature 0.89, 78.2 °C).
+model azeotrope is x = 0.895 at 78.15 °C (literature 0.89, 78.2 °C).
 
 So for these pairs, γ is not a refinement. Without it the column design is wrong.
 
@@ -427,11 +428,13 @@ treats this honestly in two different ways:
 - **Simple mode** uses the one self-consistent CMO energy convention: one molar λ for
   the system (the mean of the components' λ at their normal boiling points), saturated
   liquid at h = 0, and feed enthalpy h_F = (1 − q)·λ. Then Qc = V·λ and Qr = V′·λ
-  exactly, and the overall energy balance closes identically. (The tests check this to
-  better than 1e-9.)
+  exactly, and the overall energy balance closes identically. The identity holds by
+  construction; the tests pin Qc = Qr at q = 1 (156.388 kW for the benzene–toluene
+  reference).
 - **Advanced mode** steps the stages with CMO lines (the standard "McCabe-Thiele with
   real equilibrium" method, stated on screen). The duties use real enthalpies:
-  - Qc = V·λ_mix at the top;
+  - Qc ≈ V·λ_mix at the top. The engine computes V·(h_V(xD, T_dew) − h_L(xD, T_bub)),
+    which includes a small sensible-heat term;
   - **Qr comes from the overall energy balance:** F·h_F + Qr = D·h_D + B·h_B + Qc.
 
   Because the stepping assumed CMO but the duty used real enthalpies, Qr does not equal
@@ -527,8 +530,9 @@ non-ideal curve. Two illustrations from the tests:
   roughly 30 % too low. A design at "1.3 × Rmin" from the wrong value would be below
   the true minimum reflux and could not make the separation at all.
 
-Close to a tangent-pinch Rmin, the stage count rises steeply: 143 stages at 1.01 × Rmin
-for ethanol–water at xD 0.84. That is real physics, not a bug. Closer still, stepping hits
+Close to a tangent-pinch Rmin, the stage count rises steeply: about 140 stages at 1.01 × Rmin
+for ethanol–water at xD 0.84 (the exact number depends on xB; for example 142 at
+xB = 0.01). That is real physics, not a bug. Closer still, stepping hits
 the engine's 300-stage limit, and `solve()` reports `STAGE_LIMIT` with a "very close to
 minimum reflux" message rather than crashing.
 
@@ -564,11 +568,11 @@ abs). Tsat is interpolated linearly in ln P, and h_fg linearly in P. The tabulat
 values are within about 0.06 % of IF97. Tsat at 1 atm is 0.026 °C off, which is within
 the spec's 0.2 % tolerance. The three steam headers:
 
-| Level | Gauge pressure | Tsat |
+| Level | Gauge pressure | Tsat (from the app's IF97 table interpolation) |
 |---|---|---|
-| LP | 3.5 barg | ≈ 147.9 °C |
-| MP | 10 barg | ≈ 184.1 °C |
-| HP | 40 barg | ≈ 251.8 °C |
+| LP | 3.5 barg | ≈ 148.1 °C (true IF97 ≈ 147.9 °C) |
+| MP | 10 barg | ≈ 184.2 °C (true IF97 ≈ 184.1 °C) |
+| HP | 40 barg | ≈ 251.9 °C (true IF97 ≈ 251.8 °C) |
 
 **Pressures are bar absolute everywhere, except steam levels, which are labelled barg**,
 with barg + 1.01325 = bar abs. Mixing the two is a classic source of 1-bar errors.
@@ -668,7 +672,8 @@ symptom, the root cause, the fix and the lesson.
 - *Lesson:* if an input is shown, it must change the calculation. Otherwise remove it.
 
 **6.1.8 Undocumented "real-plant" corrections**
-- *Symptom:* `R_eff = R(1 + 0.10·(1 − q))`, plus an overhead superheat term.
+- *Symptom:* `R_eff = R(1 + 0.10·min(max(0, 1 − q), 1.5))` (legacy line ~1074), plus an
+  overhead superheat term.
 - *Root cause:* no derivation or source. At steady state R is a specification, and the
   top-tray vapour is at its dew point.
 - *Fix:* both terms were dropped (your decision in the spec).
@@ -680,7 +685,8 @@ symptom, the root cause, the fix and the lesson.
 **6.2.1 The dew-point solver silently returned wrong states (Task 3)**
 - *Symptom:* the reviewer ran a bubble → dew round trip across the presets and pressures.
   In about 500 cases the dew point returned a liquid x that was *not* in equilibrium with
-  the given y. The worst error was |Δx| = 0.70. There was no error and no warning.
+  the given y. The worst error was |Δx| = 0.70 (Task 3 review probe; see task-3-report). There was
+  no error and no warning.
 - *Root cause:* NRTL with these parameters predicts a spurious liquid–liquid split in
   some regions (isopropanol–water and acetone–water, especially at higher pressure).
   There, y\*(x) is not monotone, so one vapour y has several candidate liquids. A
