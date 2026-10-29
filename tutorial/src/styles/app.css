@@ -810,6 +810,8 @@ body[data-view='lecture'] .lessons {
   display: none;
 }
 .pres-btn {
+  flex: none;
+  white-space: nowrap;
   min-height: 44px;
   padding: 8px 18px;
   font: 600 17px/1 var(--font);
@@ -831,8 +833,10 @@ body[data-view='lecture'] .lessons {
 .step-dots {
   display: flex;
   flex: 1;
+  flex-wrap: wrap;
   justify-content: center;
-  gap: 10px;
+  gap: 8px 10px;
+  min-width: 0;
 }
 .step-dot {
   width: 20px;
@@ -857,6 +861,21 @@ body[data-view='lecture'] .lessons {
 .lessons button:focus-visible {
   outline: 3px solid var(--teal);
   outline-offset: 2px;
+}
+
+/* Laptop widths: the dock is 38 vw - 40 px wide; keep Prev, the dots and Next on one row
+   where it fits (the dots wrap to a second row rather than squashing the buttons). */
+@media (max-width: 1500px) {
+  .pres-btn {
+    padding: 8px 12px;
+  }
+  .step-dots {
+    gap: 6px;
+  }
+  .step-dot {
+    width: 16px;
+    height: 16px;
+  }
 }
 
 /* ---- sizing (last in the file, so it overrides the base rules above) ---- */
