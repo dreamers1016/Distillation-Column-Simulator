@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Distillation 3D Spike v2</title>
+<style>
+  :root{--paper:#f4ecdc;--ink:#1f2a36;--line:#d8ccb4;--teal:#14a3a0;--card:#fffdf8;--muted:#6b7580}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--paper);color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,sans-serif;overflow:hidden}
+  #stage{position:fixed;inset:0}
+  #labels{position:fixed;inset:0;pointer-events:none}
+  .pin{pointer-events:auto;cursor:pointer;font:700 11px/1 system-ui;letter-spacing:.06em;background:#fff;border:1px solid #c9bda6;border-radius:5px;padding:4px 7px;white-space:nowrap;box-shadow:0 1px 3px #0001}
+  .pin::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--teal);margin-right:5px;vertical-align:middle}
+  .pin.temp{background:#ffffffcc;font-weight:600;cursor:default}.pin.temp::before{display:none}
+  body.lecture .pin{font-size:14px;padding:6px 9px}
+  header{position:fixed;left:14px;top:12px;display:flex;align-items:center;gap:12px;z-index:5}
+  header h1{margin:0;font-size:17px;letter-spacing:.08em}
+  header small{display:block;font-size:10px;letter-spacing:.2em;color:var(--muted)}
+  .bar{position:fixed;right:14px;top:12px;display:flex;gap:8px;z-index:5}
+  .modes{display:flex;border:1px solid #c9bda6;border-radius:16px;overflow:hidden;background:#fff}
+  .modes button{border:0;background:none;padding:7px 14px;font:700 11px system-ui;letter-spacing:.08em;cursor:pointer;color:var(--ink)}
+  .modes button.on{background:var(--ink);color:#fff}
+  #caption{position:fixed;left:18px;top:64px;max-width:min(460px,44vw);background:var(--card);border-left:5px solid var(--teal);border-radius:6px;padding:14px 16px;box-shadow:0 4px 14px #0002;font-size:19px;line-height:1.4;z-index:5}
+  #caption b{display:block;font-size:13px;letter-spacing:.1em;color:var(--teal);margin-bottom:4px;text-transform:uppercase}
+  #presenter{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);display:flex;gap:10px;align-items:center;background:var(--ink);color:#fff;border-radius:24px;padding:8px 14px;z-index:5;font:600 13px system-ui}
+  #presenter button{background:none;border:0;color:#fff;font:600 13px system-ui;cursor:pointer;padding:4px 8px}
+  #dots span{display:inline-block;width:8px;height:8px;border-radius:50%;border:1.5px solid #fff;margin:0 2px}
+  #dots span.on{background:#fff}
+  #panel{position:fixed;right:14px;top:56px;bottom:14px;width:320px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;overflow:auto;z-index:5;font-size:13px}
+  #panel h3{margin:14px 0 6px;font-size:11px;letter-spacing:.12em;color:var(--muted)}
+  #panel h3:first-child{margin-top:0}
+  select{width:100%;padding:6px;font:inherit;border:1px solid #c9bda6;border-radius:6px;background:#fff}
+  .sl{margin:8px 0}.sl label{display:flex;justify-content:space-between;font-weight:600}
+  .sl input{width:100%;accent-color:var(--teal)}
+  .kpi{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .kpi div{background:var(--paper);border-radius:6px;padding:6px 8px;font-weight:700;font-size:15px}
+  .kpi small{display:block;font-weight:500;font-size:10px;color:var(--muted)}
+  .warn{background:#fff1d6;border:1px solid #e0a43a;color:#7a4b00;border-radius:6px;padding:8px;margin-top:10px;font-weight:600;line-height:1.35}
+  .err{background:#fde3e1;border-color:#d9534f;color:#8a1f1a}
+  #info{margin-top:10px;background:var(--paper);border-radius:8px;padding:10px;line-height:1.4}
+  #info b{display:block;font-size:15px}#info i{color:var(--muted);font-size:11px;font-style:normal;letter-spacing:.08em}
+  .hint{position:fixed;left:14px;bottom:14px;font-size:11px;color:var(--muted);z-index:4}
+  body.lecture #panel{display:none}
+  body.explore #caption,body.explore #presenter{display:none}
+</style>
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}
+</script>
+</head>
+<body class="lecture">
+<div id="stage"></div>
+<div id="labels"></div>
+<header><span style="font-size:26px">⚗</span><div><h1>LEARN DISTILLATION</h1><small>EXPLORE · UNDERSTAND · DESIGN</small></div></header>
+<div class="bar">
+  <div class="modes"><button id="cut" class="on">CUTAWAY</button></div>
+  <div class="modes"><button id="mLect" class="on">LECTURE</button><button id="mExp">EXPLORE</button></div>
+</div>
+
+<div id="caption"></div>
+<div id="presenter"><button id="prev">◀ Prev</button><span id="dots"></span><button id="next">Next ▶</button></div>
+
+<aside id="panel">
+  <h3>MIXTURE</h3>
+  <select id="mix"></select>
+  <h3>OPERATING CONDITIONS</h3>
+  <div class="sl"><label><span>Reflux ratio R</span><span id="vR"></span></label><input id="R" type="range" min="0.3" max="8" step="0.1"></div>
+  <div class="sl"><label><span>Distillate purity x<sub>D</sub></span><span id="vxD"></span></label><input id="xD" type="range" min="0.80" max="0.995" step="0.005"></div>
+  <div class="sl"><label><span>Bottoms x<sub>B</sub></span><span id="vxB"></span></label><input id="xB" type="range" min="0.005" max="0.2" step="0.005"></div>
+  <div class="sl"><label><span>Feed temperature</span><span id="vT"></span></label><input id="T" type="range" min="-30" max="130" step="1"></div>
+  <h3>RESULTS</h3>
+  <div class="kpi" id="kpi"></div>
+  <div id="warn"></div>
+  <h3>SELECTED PART</h3>
+  <div id="info">Click any part, an individual tray, or a label.</div>
+</aside>
+<div class="hint">Drag to rotate · Right-drag to pan · Scroll to zoom · Click a part or a tray</div>
+
+<script type="module">
+import * as THREE from 'three';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+import {CSS2DRenderer, CSS2DObject} from 'three/addons/renderers/CSS2DRenderer.js';
+import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
+
+// ── DATA (ported from index.html) ──────────────────────────────────────────
+const MIXES = {
+  'methanol-water':    {name:'Methanol–Water',    alpha:3.8, feedComp:0.5, lam:35.3, mw:25.0, mwL:32.0, mwH:18.0,  cp:3.0, T:75,  bpL:64.7,  bpH:100.0},
+  'ethanol-water':     {name:'Ethanol–Water',     alpha:2.3, feedComp:0.1, lam:38.6, mw:30.0, mwL:46.0, mwH:18.0,  cp:3.5, T:85,  bpL:78.4,  bpH:100.0, azeo:0.894},
+  'benzene-toluene':   {name:'Benzene–Toluene',   alpha:2.4, feedComp:0.5, lam:30.8, mw:85.0, mwL:78.1, mwH:92.1,  cp:1.8, T:95,  bpL:80.1,  bpH:110.6},
+  'acetone-water':     {name:'Acetone–Water',     alpha:5.2, feedComp:0.3, lam:29.1, mw:35.0, mwL:58.1, mwH:18.0,  cp:3.2, T:65,  bpL:56.0,  bpH:100.0},
+  'propane-butane':    {name:'Propane–Butane',    alpha:3.5, feedComp:0.5, lam:18.8, mw:50.0, mwL:44.1, mwH:58.1,  cp:2.4, T:-10, bpL:-42.1, bpH:-0.5},
+  'hexane-heptane':    {name:'Hexane–Heptane',    alpha:2.3, feedComp:0.5, lam:28.9, mw:93.0, mwL:86.2, mwH:100.2, cp:2.2, T:80,  bpL:68.7,  bpH:98.4},
+  'isopropanol-water': {name:'Isopropanol–Water', alpha:1.8, feedComp:0.4, lam:39.9, mw:36.0, mwL:60.1, mwH:18.0,  cp:3.4, T:85,  bpL:82.6,  bpH:100.0, azeo:0.674},
+  'methanol-ethanol':  {name:'Methanol–Ethanol',  alpha:1.7, feedComp:0.5, lam:35.3, mw:39.0, mwL:32.0, mwH:46.1,  cp:2.6, T:70,  bpL:64.7,  bpH:78.4}
+};
+const INFO = {
+  condenser: {name:'Condenser', tag:'SHELL & TUBE HX', fn:'Overhead vapour condenses on the outside of tubes carrying cooling water. The cutaway shows the tube bundle between the two tubesheets.'},
+  refluxDrum:{name:'Reflux Drum', tag:'ACCUMULATOR', fn:'Collects condensed liquid and splits it into distillate product and reflux returned to the top tray. R = L / D.'},
+  reboiler:  {name:'Reboiler', tag:'KETTLE HX', fn:'Steam condenses inside the U-tube bundle and boils the bottoms liquid around it. Vapour leaves the top back to the column; liquid spills over the weir as bottoms product.'},
+  feed:      {name:'Feed', tag:'FEED NOZZLE', fn:'Introduces the feed onto the tray that best matches its composition. Its thermal condition q sets how the internal flows change across the feed tray.'},
+  column:    {name:'Column Shell', tag:'SEPARATION VESSEL', fn:'Pressure vessel with 2:1 ellipsoidal heads, a flared support skirt, manways for tray access, platforms and a ladder for operators.'},
+  tray:      {name:'Sieve Tray', tag:'COLUMN INTERNALS', fn:'Vapour bubbles up through the perforations into the liquid on the deck. Liquid flows across the tray, over the outlet weir and down the downcomer to the tray below — on alternating sides.'}
+};
+const P = {mix:'methanol-water', R:2.5, xD:0.95, xB:0.05, xF:0.5, F:1000, T:75};
+
+// ── CALC (ported from index.html calc(), trimmed to what the spike draws) ──
+function calc() {
+  const m = MIXES[P.mix], {xD, xB, xF, F, R} = P;
+  if (xD<=xF || xF<=xB) return {err:'Need xB < xF < xD'};
+  const mwFeed = xF*m.mwL + (1-xF)*m.mwH, Fmol = F/mwFeed;
+  const lamMass=(m.lam/m.mw)*1000, Tb=m.bpL*xF+m.bpH*(1-xF);
+  const q=(lamMass+m.cp*(Tb-P.T))/lamMass;
+  const R_eff = R*(1+0.10*Math.min(Math.max(0,1-q),1.5));
+  const Tcond = m.bpL*xD + m.bpH*(1-xD), Treb = m.bpL*xB + m.bpH*(1-xB);
+  const lamCond = m.lam*(Tcond+273.15)/(Tb+273.15), lamReb = m.lam*(Treb+273.15)/(Tb+273.15);
+  const Dmol = Fmol*(xF-xB)/(xD-xB), Lmol = Dmol*R_eff, Vmol = Lmol+Dmol;
+  const Qc = Vmol*lamCond*1000/3600;
+  const Qr = (Vmol-(1-q)*Fmol)*lamReb*1000/3600*1.08;
+  let Rmin=(1/(m.alpha-1))*((xD/xF)-m.alpha*((1-xD)/(1-xF))); if (Rmin<0) Rmin=0;
+  if (R <= Rmin*1.05) return {err:`R = ${R} is too close to Rmin (${Rmin.toFixed(2)}). Infinite trays. Raise R above ${(Rmin*1.05).toFixed(2)}.`, Rmin};
+  const rs=R_eff/(R_eff+1), ri=xD/(R_eff+1);
+  let xFeed = Math.abs(q-1)<1e-6 ? xF : (xF*(1-q/(q-1))-ri)/(rs-q/(q-1));
+  xFeed = Math.max(xB+1e-6, Math.min(xD-1e-6, xFeed));
+  const yFeed = rs*xFeed+ri, ss=(yFeed-xB)/(xFeed-xB), si=xB*(1-ss);
+  let y=xD, N=0, feedStage=null;
+  while (y > xB+1e-6 && N < 200) {
+    const xe = y/(m.alpha-(m.alpha-1)*y); N++;
+    const above = xe >= xFeed;
+    if (feedStage===null && !above) feedStage=N;
+    if (xe <= xB+1e-6) break;
+    y = above ? rs*xe+ri : ss*xe+si;
+  }
+  if (feedStage===null) feedStage=N;
+  const Na = Math.ceil(N/0.70), feedTray = Math.min(Na, Math.ceil(feedStage/0.70));
+  return {err:null, N, Na, feedTray, Rmin, q, Qc, Qr, Vmol, Lmol, Tcond, Treb,
+          D:Dmol*(xD*m.mwL+(1-xD)*m.mwH), B:(Fmol-Dmol)*(xB*m.mwL+(1-xB)*m.mwH)};
+}
+
+// ── SCENE ──────────────────────────────────────────────────────────────────
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+document.getElementById('stage').appendChild(renderer.domElement);
+const labelR = new CSS2DRenderer({element:document.getElementById('labels')});
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#f4ecdc');
+scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+const camera = new THREE.PerspectiveCamera(36, 1, 0.1, 300);
+camera.position.set(18, 14, 26);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.autoRotate = true; controls.autoRotateSpeed = 0.5;
+controls.target.set(2, 7, 0);
+
+scene.add(new THREE.HemisphereLight('#fff8ec', '#b9a98a', 0.5));
+const sun = new THREE.DirectionalLight('#ffffff', 2.2);
+sun.position.set(10, 30, 16); sun.castShadow = true;
+sun.shadow.mapSize.set(2048,2048); Object.assign(sun.shadow.camera,{left:-18,right:18,top:36,bottom:-6,far:80});
+sun.shadow.bias = -0.0005;
+scene.add(sun);
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(120,120), new THREE.ShadowMaterial({opacity:.16}));
+floor.rotation.x = -Math.PI/2; floor.receiveShadow = true; scene.add(floor);
+const grid = new THREE.GridHelper(120, 120, '#d6cab2', '#e5dccb'); grid.position.y = 0.001; scene.add(grid);
+
+function resize(){ const w=innerWidth,h=innerHeight; renderer.setSize(w,h); labelR.setSize(w,h); camera.aspect=w/h; camera.updateProjectionMatrix(); }
+addEventListener('resize', resize); resize();
+
+// ── MATERIALS & GEOMETRY HELPERS ───────────────────────────────────────────
+const V = (x,y,z)=>new THREE.Vector3(x,y,z), Y = V(0,1,0), TAU = Math.PI*2;
+const CUT_TS = Math.PI/2, CUT_TL = Math.PI;               // keeps the back half (z ≤ 0)
+let CUT = true;
+function mats(){ // one set per part so highlighting a part never lights another
+  return {
+    steel:  new THREE.MeshStandardMaterial({color:'#c3c8cd', metalness:.85, roughness:.3}),
+    inner:  new THREE.MeshStandardMaterial({color:'#9aa1a8', metalness:.6, roughness:.5, side:THREE.BackSide}),
+    face:   new THREE.MeshStandardMaterial({color:'#6f767d', metalness:.4, roughness:.6, side:THREE.DoubleSide}),
+    dark:   new THREE.MeshStandardMaterial({color:'#3a3f44', metalness:.6, roughness:.45}),
+    grate:  new THREE.MeshStandardMaterial({color:'#2f3337', metalness:.5, roughness:.7}),
+    tube:   new THREE.MeshStandardMaterial({color:'#d8b48a', metalness:.8, roughness:.3}),
+    liquid: new THREE.MeshPhysicalMaterial({color:'#7fb2e0', transmission:.6, roughness:.1, transparent:true, opacity:.55})
+  };
+}
+function cyl(rt, rb, h, mat, open=false, cut=false, seg=48){
+  return new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,seg,1,open, cut?CUT_TS:0, cut?CUT_TL:TAU), mat);
+}
+function box(w,h,d,mat){ return new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat); }
+function orient(o, pos, dir){ o.position.copy(pos); o.quaternion.setFromUnitVectors(Y, dir.clone().normalize()); return o; }
+
+// vertical vessel centred on origin, axis = y, with 2:1-ish heads; optional section cut
+function vesselV(r, len, ms, cut, headK=.5, t=.05){
+  const g = new THREE.Group();
+  g.add(cyl(r,r,len,ms.steel,true,cut), cyl(r-t,r-t,len,ms.inner,true,cut));
+  for (const s of [1,-1]) for (const [rr,mm] of [[r,ms.steel],[r-t,ms.inner]]){
+    const h = new THREE.Mesh(new THREE.SphereGeometry(rr,48,16, cut?Math.PI:0, cut?Math.PI:TAU, 0, Math.PI/2), mm);
+    h.scale.y = headK; h.position.y = s*len/2; if (s<0) h.rotation.z = Math.PI; g.add(h);
+  }
+  if (cut) for (const sx of [1,-1]){ const f=box(t,len,.004,ms.face); f.position.x=sx*(r-t/2); g.add(f); }
+  return g;
+}
+// horizontal vessel: same thing rotated so its axis runs along x (cut plane is still z = 0)
+function vesselH(r, len, ms, cut, headK=.5){
+  const outer = new THREE.Group(), v = vesselV(r,len,ms,cut,headK);
+  v.rotation.z = -Math.PI/2; outer.add(v); outer.userData.inner = v; return outer;
+}
+function nozzle(ms, r, len, pos, dir, blind=false){
+  const g = new THREE.Group();
+  const p = cyl(r,r,len,ms.steel,false,false,24); p.position.y = len/2; g.add(p);
+  const f = cyl(r*1.75,r*1.75,.07,ms.steel,false,false,32); f.position.y = len; g.add(f);
+  if (blind){
+    const b = cyl(r*1.75,r*1.75,.07,ms.steel,false,false,32); b.position.y = len+.07; g.add(b);
+    const n = Math.max(8, Math.round(r*40));
+    for (let k=0;k<n;k++){ const a=k/n*TAU, bt=cyl(.022,.022,.2,ms.dark,false,false,6); bt.position.set(Math.cos(a)*r*1.45, len+.04, Math.sin(a)*r*1.45); g.add(bt); }
+  }
+  return orient(g, pos, dir);
+}
+function saddle(ms, x, r, y){ const s = box(.18, y, r*1.7, ms.steel); s.position.set(x, y/2, 0); const b = box(.5,.05,r*1.9,ms.dark); b.position.set(x,.025,0); const g=new THREE.Group(); g.add(s,b); return g; }
+function pipe(pts, color, r=.08){
+  const g = new THREE.Group(), mat = new THREE.MeshStandardMaterial({color, roughness:.45, metalness:.35});
+  for (let i=0;i<pts.length-1;i++){
+    const a=V(...pts[i]), b=V(...pts[i+1]), m=cyl(r,r,a.distanceTo(b),mat,false,false,16);
+    g.add(orient(m, a.clone().add(b).multiplyScalar(.5), b.clone().sub(a)));
+  }
+  pts.slice(1,-1).forEach(p=>{ const s=new THREE.Mesh(new THREE.SphereGeometry(r*1.02,16,10),mat); s.position.set(...p); g.add(s); });
+  return g;
+}
+function arcRail(ms, r, y, a0, a1){
+  const g = new THREE.Group();
+  const t = new THREE.Mesh(new THREE.TorusGeometry(r,.018,6,48,a1-a0), ms.steel); t.rotation.x = Math.PI/2; g.add(t);
+  g.rotation.y = -a0; g.position.y = y; return g;
+}
+function platform(ms, rIn, rOut, y, a0, a1){
+  const g = new THREE.Group(), s = new THREE.Shape();
+  s.absarc(0,0,rOut,a0,a1,false); s.absarc(0,0,rIn,a1,a0,true);
+  const geo = new THREE.ExtrudeGeometry(s,{depth:.06,bevelEnabled:false,curveSegments:32}); geo.rotateX(Math.PI/2);
+  const deck = new THREE.Mesh(geo, ms.grate); deck.position.y = y+.06; g.add(deck);
+  for (let a=a0; a<=a1+1e-3; a+=(a1-a0)/Math.ceil((a1-a0)/.32)){
+    const p = cyl(.018,.018,1.0,ms.steel,false,false,8); p.position.set(Math.cos(a)*(rOut-.04), y+.5, Math.sin(a)*(rOut-.04)); g.add(p);
+  }
+  g.add(arcRail(ms, rOut-.04, y+1.0, a0, a1), arcRail(ms, rOut-.04, y+.55, a0, a1));
+  return g;
+}
+function ladder(ms, rr, a, y0, y1){
+  const g = new THREE.Group(), h = y1-y0;
+  for (const sx of [-.2,.2]){ const rail = box(.04,h,.06,ms.steel); rail.position.set(sx,h/2,0); g.add(rail); }
+  for (let y=.3; y<h; y+=.3){ const rung = cyl(.016,.016,.4,ms.steel,false,false,6); rung.rotation.z=Math.PI/2; rung.position.y=y; g.add(rung); }
+  g.position.set(Math.cos(a)*rr, y0, Math.sin(a)*rr); g.rotation.y = -(a+Math.PI/2); return g;
+}
+
+// sieve-tray deck: circle minus downcomer chord, perforated active area (built once, shared)
+const RC = 1.0, TW = .05, SP = .62;                       // column radius, wall, tray spacing
+const RT = RC-TW-.005, CH = .62*RT, CHORD = 2*Math.sqrt(RT*RT-CH*CH);
+let trayGeo = null;
+function getTrayGeo(){
+  if (trayGeo) return trayGeo;
+  const a0 = Math.acos(CH/RT), s = new THREE.Shape();
+  s.absarc(0,0,RT,a0,TAU-a0,false); s.lineTo(CH, RT*Math.sin(a0));
+  for (let x=-.48*RT, row=0; x<CH-.1; x+=.12, row++)
+    for (let z=-RT+(row%2?.06:0); z<RT; z+=.12)
+      if (x*x+z*z < (RT-.1)**2) { const h=new THREE.Path(); h.absarc(x,z,.034,0,TAU,true); s.holes.push(h); }
+  trayGeo = new THREE.ExtrudeGeometry(s,{depth:.025,bevelEnabled:false,curveSegments:9});
+  trayGeo.rotateX(Math.PI/2);
+  return trayGeo;
+}
+
+// ── PLANT (rebuilt whenever results change) ────────────────────────────────
+let plant=null, parts={}, anchors={}, flow=null, picked=null;
+function clearPlant(){
+  if (!plant) return;
+  plant.traverse(o=>{ if (o.isCSS2DObject) o.element.remove(); if (o.geometry && o.geometry!==trayGeo) o.geometry.dispose(); });
+  scene.remove(plant);
+}
+function label(text, pos, key, cls='pin'){
+  const el=document.createElement('div'); el.className=cls; el.textContent=text;
+  if (key) el.onclick = e => { e.stopPropagation(); select(parts[key]); };
+  const o=new CSS2DObject(el); o.position.copy(pos); return o;
+}
+function buildPlant(res){
+  clearPlant();
+  plant = new THREE.Group(); parts = {};
+  const Na = res.Na;
+  const y0 = 2.6;                                          // bottom tangent line (top of skirt)
+  const sump = 1.3, topSpace = .9;
+  const trayY = i => y0 + sump + (Na-i)*SP;                // tray 1 at the top
+  const yTop = trayY(1) + topSpace, L = yTop - y0, yMid = (y0+yTop)/2;
+
+  // ── column shell, skirt, base ──
+  const ms = mats(), col = new THREE.Group(); col.userData.key='column';
+  const shell = vesselV(RC, L, ms, CUT); shell.position.y = yMid; col.add(shell);
+  const skirt = cyl(RC*.99, RC*1.28, y0, ms.steel, true, CUT); skirt.position.y = y0/2; col.add(skirt);
+  const skirtIn = cyl(RC*.95, RC*1.24, y0, ms.inner, true, CUT); skirtIn.position.y = y0/2; col.add(skirtIn);
+  const base = new THREE.Mesh(new THREE.LatheGeometry([new THREE.Vector2(1.05,0),new THREE.Vector2(1.6,0),new THREE.Vector2(1.6,.09),new THREE.Vector2(1.05,.09)],64), ms.steel); col.add(base);
+  for (let k=0;k<16;k++){ const a=k/16*TAU, b=cyl(.045,.045,.28,ms.dark,false,false,8), n=cyl(.08,.08,.07,ms.dark,false,false,6);
+    b.position.set(Math.cos(a)*1.42,.14,Math.sin(a)*1.42); n.position.set(Math.cos(a)*1.42,.13,Math.sin(a)*1.42); col.add(b,n); }
+  // girth seams (only on the half that's drawn when cut)
+  for (let y=y0+1.6; y<yTop-.3; y+=1.8){ const s=new THREE.Mesh(new THREE.TorusGeometry(RC+.004,.014,6,64,CUT?Math.PI:TAU), ms.steel); s.rotation.x=Math.PI/2; const sg=new THREE.Group(); sg.add(s); sg.rotation.y=CUT?-Math.PI:0; sg.position.y=y; col.add(sg); }
+  // nozzles & manways
+  const vapTop = yTop + RC*.5;
+  col.add(nozzle(ms,.24,.45,V(0,vapTop-.05,0),Y));                         // overhead vapour
+  col.add(nozzle(ms,.16,.45,V(0,y0-RC*.5+.05,0),V(0,-1,0)));               // bottoms outlet
+  col.add(nozzle(ms,.12,.4,V(RC-.02,yTop-.45,0),V(1,0,0)));                // reflux inlet
+  col.add(nozzle(ms,.2,.4,V(RC-.02,y0+.6,0),V(1,0,0)));                    // reboiler vapour return
+  for (let y=y0+1.0; y<yTop-.6; y+=SP*7){ const a=-Math.PI/4; col.add(nozzle(ms,.3,.28,V(Math.cos(a)*(RC-.02),y,Math.sin(a)*(RC-.02)),V(Math.cos(a),0,Math.sin(a)),true)); }
+  for (let y=y0+2.2; y<yTop-.6; y+=SP*5){ const a=-2.3; col.add(nozzle(ms,.06,.25,V(Math.cos(a)*(RC-.02),y,Math.sin(a)*(RC-.02)),V(Math.cos(a),0,Math.sin(a)))); } // instrument taps
+  // platforms + ladder on the back-left
+  const aL = -3*Math.PI/4, pa0 = aL-.95, pa1 = aL+.95;
+  const levels = [yTop-.55]; for (let y=yTop-.55-6; y>y0+2; y-=6) levels.push(y);
+  levels.forEach(y=>col.add(platform(ms, RC+.05, RC+.85, y, pa0, pa1)));
+  col.add(ladder(ms, RC+.55, aL+.5, 0, yTop-.55+1.0));
+  // sump liquid in the bottom head
+  const sumpLiq = new THREE.Mesh(new THREE.SphereGeometry(RC-.06,40,12,0,TAU,Math.PI/2,Math.PI/2), ms.liquid);
+  sumpLiq.scale.y = .5; sumpLiq.position.y = y0; col.add(sumpLiq);
+  const sumpTop = cyl(RC-.06,RC-.06,.35,ms.liquid,false,false,40); sumpTop.position.y = y0+.17; col.add(sumpTop);
+  // reflux distributor header with drip pipes
+  const hdr = cyl(.07,.07,1.6,ms.steel,false,false,16); hdr.rotation.z=Math.PI/2; hdr.position.set(.15,yTop-.45,0); col.add(hdr);
+  for (let k=0;k<5;k++){ const d=cyl(.03,.03,.22,ms.steel,false,false,8); d.position.set(-.5+k*.28,yTop-.56,0); col.add(d); }
+  plant.add(col); parts.column = col;
+
+  // ── trays ──
+  const cold = new THREE.Color('#9fb6cc'), hot = new THREE.Color('#d6a08c'), steelC = new THREE.Color('#c3c8cd');
+  for (let i=1;i<=Na;i++){
+    const t = (i-1)/Math.max(1,Na-1), isFeed = i===res.feedTray;
+    const tm = new THREE.MeshStandardMaterial({color: steelC.clone().lerp(cold.clone().lerp(hot,t), .45), metalness:.75, roughness:.32, emissive: isFeed?'#0d5e52':'#000'});
+    tm.userData.baseEm = tm.emissive.getHex();
+    const g = new THREE.Group(); g.userData = {key:'tray', n:i};
+    g.add(new THREE.Mesh(getTrayGeo(), tm));
+    const apron = box(.02, SP-.1+.08, CHORD, tm); apron.position.set(CH, (.08-(SP-.1))/2, 0); g.add(apron);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(RT+.01,.02,6,48,CUT?Math.PI:TAU), tm); ring.rotation.x=Math.PI/2;
+    const rg = new THREE.Group(); rg.add(ring); rg.rotation.y = (i%2?0:Math.PI) + (CUT?-Math.PI:0); rg.position.y=-.03; // support ring stays on the back half
+    g.add(rg);
+    g.position.y = trayY(i); g.rotation.y = i%2 ? 0 : Math.PI;   // downcomers alternate sides
+    col.add(g);
+  }
+
+  // ── feed ──
+  const fms = mats(), feed = new THREE.Group(); feed.userData.key='feed';
+  const fY = trayY(res.feedTray)+.22;
+  feed.add(nozzle(fms,.15,.45,V(-RC+.02,fY,0),V(-1,0,0)));
+  const fi = cyl(.06,.06,1.2,fms.steel,false,false,12); fi.rotation.z=Math.PI/2; fi.position.set(-.4,fY,0); feed.add(fi); // internal feed pipe
+  feed.add(pipe([[-7,fY,0],[-1.47,fY,0]], '#2a8f6f', .11));
+  const fv = box(.36,.36,.36,fms.dark); fv.position.set(-4,fY,0); feed.add(fv);
+  plant.add(feed); parts.feed = feed;
+
+  // ── steel structure for condenser + drum ──
+  const sx = 4.6, cY = yTop+1.4, dY = yTop-1.4;
+  const st = new THREE.Group(), sms = mats(); sms.steel.color.set('#5d6f80');
+  for (const [x,z] of [[sx-1.6,-.9],[sx+1.6,-.9],[sx-1.6,.9],[sx+1.6,.9]]){ const c=box(.14,cY-.75,.14,sms.steel); c.position.set(x,(cY-.75)/2,z); st.add(c); }
+  for (const y of [dY-.65, cY-.75]) for (const z of [-.9,.9]){ const b=box(3.34,.14,.14,sms.steel); b.position.set(sx,y,z); st.add(b); }
+  for (const y of [dY-.65, cY-.75]){ const d=box(3.3,.04,1.8,sms.grate); d.position.set(sx,y+.09,0); st.add(d); }
+  plant.add(st);
+
+  // ── condenser: shell & tube with channel heads and exposed bundle ──
+  const cms = mats(), cnd = vesselH(.55, 3.0, cms, CUT, .45); cnd.userData.key='condenser'; cnd.position.set(sx,cY,0);
+  const cin = cnd.userData.inner;
+  for (const s of [1,-1]){
+    const fl = cyl(.66,.66,.08,cms.steel,false,CUT); fl.position.y = s*1.05; cin.add(fl);            // body flanges
+    const ts = cyl(.5,.5,.04,cms.face,false,CUT); ts.position.y = s*1.0; cin.add(ts);                // tubesheets
+  }
+  for (let k=0;k<19;k++){ const a=k<1?0:(k<7?(k-1)/6*TAU:(k-7)/12*TAU+.26), rr=k<1?0:(k<7?.17:.34);
+    const tb=cyl(.035,.035,2.0,cms.tube,false,false,8); tb.position.set(Math.cos(a)*rr,0,Math.sin(a)*rr); cin.add(tb); }
+  cnd.add(nozzle(cms,.2,.35,V(.3,.5,0),Y), nozzle(cms,.14,.3,V(.3,-.5,0),V(0,-1,0)));
+  cnd.add(nozzle(cms,.1,.3,V(-1.35,.4,0),Y), nozzle(cms,.1,.3,V(-1.35,-.4,0),V(0,-1,0)));       // CW in / out on channel
+  cnd.add(pipe([[-1.35,.7,0],[-1.35,1.2,0],[-3.2,1.2,0]], '#3d8f5a', .07), pipe([[-1.35,-.7,0],[-1.35,-1.0,0],[-2.6,-1.0,0]], '#3d8f5a', .07));
+  plant.add(cnd); parts.condenser = cnd;
+
+  // ── reflux drum ──
+  const dms = mats(), drum = vesselH(.5, 2.2, dms, CUT, .5); drum.userData.key='refluxDrum'; drum.position.set(sx,dY,0);
+  const dl = new THREE.Mesh(new THREE.CylinderGeometry(.44,.44,2.2,40,1,false,Math.PI/2+.9,Math.PI*2-1.8), dms.liquid);
+  dl.rotation.z = -Math.PI/2; drum.add(dl);                                                           // liquid inventory
+  drum.add(nozzle(dms,.14,.3,V(.3,.48,0),Y), nozzle(dms,.12,.3,V(-.6,-.48,0),V(0,-1,0)), nozzle(dms,.1,.3,V(.8,-.48,0),V(0,-1,0)));
+  const lg = cyl(.03,.03,.8,dms.liquid,false,false,8); lg.position.set(1.62,0,.0); drum.add(lg);  // level glass
+  drum.add(nozzle(dms,.05,.15,V(1.4,.3,0),V(1,0,0)), nozzle(dms,.05,.15,V(1.4,-.3,0),V(1,0,0)));
+  plant.add(drum); parts.refluxDrum = drum;
+
+  // ── kettle reboiler at grade ──
+  const rms = mats(), rY = 1.25, reb = new THREE.Group(); reb.userData.key='reboiler'; reb.position.set(4.6,rY,0);
+  const kShell = vesselH(.85, 2.2, rms, CUT, .5); kShell.position.x = .4; reb.add(kShell);
+  const red = new THREE.Mesh(new THREE.CylinderGeometry(.85,.5,.5,48,1,true,CUT?CUT_TS:0,CUT?CUT_TL:TAU), rms.steel); red.rotation.z = -Math.PI/2; red.position.set(-.95,0,0); reb.add(red);
+  const chan = vesselH(.5, .7, rms, CUT, .5); chan.position.x = -1.55; reb.add(chan);
+  const ka = cyl(.6,.6,.08,rms.steel,false,CUT); ka.rotation.z=Math.PI/2; ka.position.x=-1.2; reb.add(ka);
+  for (let k=0;k<14;k++){ const yy=-.42+(k%3)*.13, zz=-.36+Math.floor(k/3)*.18; if (Math.abs(zz)>.4) continue;
+    const tb=cyl(.035,.035,2.6,rms.tube,false,false,8); tb.rotation.z=Math.PI/2; tb.position.set(.1,yy+.12,zz); reb.add(tb); }
+  const kl = new THREE.Mesh(new THREE.CylinderGeometry(.8,.8,2.0,40,1,false,Math.PI/2+1.25,Math.PI*2-2.5), rms.liquid);
+  kl.rotation.z = -Math.PI/2; kl.position.x = .3; reb.add(kl);                                      // boiling pool
+  const weir = box(.04,.9,1.2,rms.face); weir.position.set(1.35,-.35,0); reb.add(weir);
+  reb.add(nozzle(rms,.22,.35,V(.3,.82,0),Y), nozzle(rms,.14,.3,V(-.3,-.82,0),V(0,-1,0)), nozzle(rms,.12,.3,V(1.8,-.6,0),V(0,-1,0)));
+  reb.add(nozzle(rms,.1,.3,V(-1.7,.45,0),Y), nozzle(rms,.08,.3,V(-1.7,-.45,0),V(0,-1,0)));       // steam in / condensate out
+  for (const x of [-.4,1.3]){ const s=saddle(rms,x,.85,rY-.75); s.position.y=-rY; reb.add(s); }
+  reb.add(pipe([[-1.7,.75,0],[-1.7,1.4,0],[-1.7,1.4,-1.6]], '#8a6a2a', .07), pipe([[1.8,-.9,0],[1.8,-1.05,0],[4.5,-1.05,0]], '#3b6fb5'));
+  plant.add(reb); parts.reboiler = reb;
+
+  // ── process piping ──
+  plant.add(pipe([[0,vapTop+.45,0],[0,cY+1.2,0],[sx+.3,cY+1.2,0],[sx+.3,cY+.85,0]], '#b5523b', .13));          // overhead vapour
+  plant.add(pipe([[sx+.3,cY-.8,0],[sx+.3,dY+.78,0]], '#3b6fb5'));                                             // condensate
+  plant.add(pipe([[sx-.6,dY-.78,0],[sx-.6,dY-1.0,0],[2.0,dY-1.0,0],[2.0,yTop-.45,0],[RC+.42,yTop-.45,0]], '#3b6fb5', .07)); // reflux
+  plant.add(pipe([[sx+.8,dY-.78,0],[sx+.8,dY-1.0,0],[9,dY-1.0,0]], '#3b6fb5', .07));                          // distillate
+  plant.add(pipe([[0,y0-RC*.5-.4,0],[0,.35,0],[4.3,.35,0],[4.3,rY-1.12,0]], '#3b6fb5', .1));                  // bottoms to reboiler
+  plant.add(pipe([[4.9,rY+1.17,0],[4.9,y0+.6,0],[RC+.42,y0+.6,0]], '#b5523b', .15));                           // vapour return
+  shadowed(plant);
+
+  // ── labels ──
+  plant.add(label('CONDENSER', V(sx,cY+1.0,.6), 'condenser'));
+  plant.add(label('REFLUX DRUM', V(sx+1.9,dY+.4,0), 'refluxDrum'));
+  plant.add(label(`FEED → TRAY ${res.feedTray}`, V(-4.5,fY+.6,0), 'feed'));
+  plant.add(label('REBOILER', V(5,rY+1.4,.6), 'reboiler'));
+  plant.add(label(`${Na} SIEVE TRAYS`, V(-1.9,yTop-.2,0), 'column'));
+  plant.add(label(`≈ ${res.Tcond.toFixed(0)} °C`, V(-1.7,trayY(1),0), null, 'pin temp'));
+  plant.add(label(`≈ ${res.Treb.toFixed(0)} °C`, V(-1.7,trayY(Na),0), null, 'pin temp'));
+  scene.add(plant);
+
+  anchors = {
+    overview:{look:[2.4,yTop*.5,0], dist:Math.max(24, yTop*1.45)},
+    feed:{look:[-1.2,fY,0], dist:7}, reboiler:{look:[3.8,rY+.6,0], dist:8.5},
+    column:{look:[0,trayY(Math.ceil(Na/2)),0], dist:7.5}, condenser:{look:[sx-.4,(cY+dY)/2,0], dist:10}
+  };
+  buildFlow(res, Na, trayY, y0, yTop);
+  if (picked) { const k=picked.userData.key, n=picked.userData.n; picked=null; select(k==='tray' ? col.children.find(c=>c.userData.n===Math.min(n,Na)) : parts[k], false); }
+}
+function shadowed(o){ o.traverse(c=>{ if (c.isMesh && !c.material.transparent){ c.castShadow=true; c.receiveShadow=true; } }); }
+
+// ── FLOW: liquid zig-zags across trays and down downcomers; vapour rises ──
+let Vref=null, Lref=null;
+function buildFlow(res, Na, trayY, y0, yTop){
+  Vref ??= res.Vmol; Lref ??= res.Lmol;
+  const pts = [V(-.4, yTop-.56, 0)];
+  for (let i=1;i<=Na;i++){
+    const d = i%2 ? 1 : -1, y = trayY(i)+.04, yNext = i<Na ? trayY(i+1)+.06 : y0+.36;
+    pts.push(V(-d*CH*.95, y, 0), V(d*CH*.9, y, 0), V(d*(CH+.12), y-.02, 0), V(d*(CH+.12), yNext, 0));
+  }
+  const cum=[0]; for (let i=1;i<pts.length;i++) cum.push(cum[i-1]+pts[i].distanceTo(pts[i-1]));
+  const total = cum[cum.length-1];
+  const nL=420, nV=320;
+  const mk=(n,color,size)=>{ const g=new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n*3),3));
+    return new THREE.Points(g, new THREE.PointsMaterial({color, size, transparent:true, opacity:.9, depthWrite:false})); };
+  const liq = mk(nL,'#2c7be5',.07), vap = mk(nV,'#f08a3c',.09);
+  const s = Float32Array.from({length:nL},()=>Math.random()*total), zL = Float32Array.from({length:nL},()=>(Math.random()-.5)*CHORD*.8);
+  const vp = vap.geometry.attributes.position;
+  for (let i=0;i<nV;i++){ vp.setXYZ(i,(Math.random()-.5)*1.0, y0+.6+Math.random()*(yTop-y0-.6), (Math.random()-.5)*1.2); }
+  plant.add(liq, vap);
+  flow = {liq, vap, s, zL, pts, cum, total, y0:y0+.6, yTop, vs:1.4*res.Vmol/Vref, ls:.9*res.Lmol/Lref};
+}
+function samplePath(f, s, out){
+  let lo=0, hi=f.cum.length-1; while (hi-lo>1){ const m=(lo+hi)>>1; if (f.cum[m]<=s) lo=m; else hi=m; }
+  const a=f.pts[lo], b=f.pts[hi], t=(s-f.cum[lo])/((f.cum[hi]-f.cum[lo])||1);
+  return out.set(a.x+(b.x-a.x)*t, a.y+(b.y-a.y)*t, 0);
+}
+
+// ── PICKING & HIGHLIGHT ────────────────────────────────────────────────────
+const ray = new THREE.Raycaster(), ptr = new THREE.Vector2(); let downAt=null;
+renderer.domElement.addEventListener('pointerdown', e=>{ downAt=[e.clientX,e.clientY]; });
+renderer.domElement.addEventListener('pointerup', e=>{
+  if (!downAt || Math.hypot(e.clientX-downAt[0], e.clientY-downAt[1])>5) return;
+  ptr.set(e.clientX/innerWidth*2-1, -(e.clientY/innerHeight)*2+1); ray.setFromCamera(ptr, camera);
+  const hit = ray.intersectObjects(Object.values(parts), true).find(h=>!h.object.isPoints);
+  let o = hit?.object; while (o && !o.userData.key) o=o.parent;
+  if (o) select(o);
+});
+function glow(obj, on){
+  obj.traverse(m=>{ if (!m.isMesh || !m.material.emissive) return;
+    m.material.userData.baseEm ??= m.material.emissive.getHex();
+    m.material.emissive.setHex(on ? 0x1d6b66 : m.material.userData.baseEm); });
+}
+function select(obj, flyTo=true){
+  if (!obj) return;
+  if (picked) glow(picked,false);
+  picked = obj; glow(obj,true);
+  const k = obj.userData.key, i = INFO[k];
+  const extra = k==='tray' ? `<br><br><b style="font-size:13px">Tray ${obj.userData.n} of ${res.Na}${obj.userData.n===res.feedTray?' · feed tray':''}</b>` : '';
+  document.getElementById('info').innerHTML = `<i>${i.tag}</i><b>${i.name}</b>${i.fn}${extra}`;
+  if (flyTo){ if (k==='tray'){ const wp=obj.getWorldPosition(V(0,0,0)); flyLook([0,wp.y,0], 5); } else if (anchors[k]) fly(k); }
+}
+
+// ── CAMERA FLIGHTS ─────────────────────────────────────────────────────────
+let tween=null;
+function flyLook(look, dist){ const l=V(...look); tween={pos:l.clone().addScaledVector(V(.5,.32,.9).normalize(),dist), look:l}; controls.autoRotate=false; }
+function fly(key){ const a=anchors[key]; flyLook(a.look, a.dist); }
+controls.addEventListener('start', ()=>{ tween=null; controls.autoRotate=false; });
+
+// ── UI ─────────────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+$('mix').innerHTML = Object.entries(MIXES).map(([k,m])=>`<option value="${k}">${m.name}${m.azeo?' (azeotrope)':''}</option>`).join('');
+let res=null;
+function update(){
+  $('mix').value=P.mix; $('R').value=P.R; $('xD').value=P.xD; $('xB').value=P.xB; $('T').value=P.T;
+  $('vR').textContent=P.R.toFixed(1); $('vxD').textContent=P.xD.toFixed(3); $('vxB').textContent=P.xB.toFixed(3); $('vT').textContent=P.T+' °C';
+  const r = calc(), m = MIXES[P.mix];
+  let warn = '';
+  if (m.azeo && P.xD >= m.azeo) warn += `<div class="warn">⚠ Azeotrope: ${m.name} forms an azeotrope at x ≈ ${m.azeo}. x<sub>D</sub> = ${P.xD.toFixed(3)} can't be reached by ordinary distillation. The tray count shown assumes constant α and is not physical past this point.</div>`;
+  if (r.err){ warn += `<div class="warn err">✕ ${r.err}</div>`; $('warn').innerHTML = warn; $('kpi').innerHTML = '<div>—<small>no valid design</small></div>'; return; }
+  res = r; $('warn').innerHTML = warn;
+  $('kpi').innerHTML = [
+    [r.N,'theoretical stages'],[r.Na,'actual trays (η = 0.70)'],[r.feedTray,'feed tray (from top)'],[r.Rmin.toFixed(2),'minimum reflux Rmin'],
+    [r.Qr.toFixed(0)+' kW','reboiler duty'],[r.Qc.toFixed(0)+' kW','condenser duty'],[r.D.toFixed(0)+' kg/h','distillate'],[r.B.toFixed(0)+' kg/h','bottoms']
+  ].map(([v,l])=>`<div>${v}<small>${l}</small></div>`).join('');
+  buildPlant(r);
+}
+$('mix').onchange = e => { const m=MIXES[e.target.value]; Object.assign(P,{mix:e.target.value, xF:m.feedComp, T:m.T, xB:Math.min(P.xB, m.feedComp/2)}); Vref=Lref=null; update(); };
+['R','xD','xB','T'].forEach(k => $(k).oninput = e => { P[k]=+e.target.value; update(); });
+$('cut').onclick = () => { CUT=!CUT; $('cut').classList.toggle('on',CUT); if (res) buildPlant(res); };
+
+// ── LECTURE SCRIPT ─────────────────────────────────────────────────────────
+const STEPS = [
+  {t:'The column', focus:'overview', set:{mix:'methanol-water',R:2.5,xD:0.95,xB:0.05,T:75,xF:0.5},
+   c:r=>`We separate a 50/50 methanol–water feed into ${(P.xD*100).toFixed(0)}% methanol at the top and nearly pure water at the bottom. Drag the column to look around at any time.`},
+  {t:'Feed', focus:'feed', c:r=>`The feed enters on tray <b style="display:inline;color:#16a085">${r.feedTray}</b> of ${r.Na}. Its thermal condition q = ${r.q.toFixed(2)} decides how the internal flows change at this tray.`},
+  {t:'Reboiler', focus:'reboiler', c:r=>`At the bottom, steam condenses inside the tube bundle and boils the liquid around it, sending vapour back to the column. That costs ${r.Qr.toFixed(0)} kW of heat.`},
+  {t:'Inside a tray', focus:'column', c:r=>`Blue liquid flows across each sieve tray, over the weir and down the downcomer, switching sides every tray. Orange vapour bubbles up through the holes. Tray tint runs from ≈${r.Treb.toFixed(0)} °C at the bottom to ≈${r.Tcond.toFixed(0)} °C at the top.`},
+  {t:'Condenser & reflux', focus:'condenser', c:r=>`At the top, cooling water in the tubes condenses the vapour. The drum sends R = ${P.R} parts back down for every 1 part taken off as product.`},
+  {t:'Low reflux', focus:'overview', set:{R:null}, c:r=>`Now R = ${P.R}, only just above Rmin = ${r.Rmin.toFixed(2)}. The column needs ${r.Na} trays, so it's tall and expensive to build.`},
+  {t:'High reflux', focus:'overview', set:{R:4.0}, c:r=>`At R = 4.0 it needs only ${r.Na} trays, but the reboiler now uses ${r.Qr.toFixed(0)} kW. This is the capital vs. energy trade-off.`},
+  {t:'Your turn', focus:'overview', c:r=>`Switch to <b style="display:inline;color:#14a3a0">Explore</b> to try other mixtures. Watch for the azeotrope warning on ethanol–water.`}
+];
+let step = 0;
+function showStep(i){
+  step = Math.max(0, Math.min(STEPS.length-1, i));
+  const s = STEPS[step];
+  if (s.set){ const set={...s.set}; if (set.R===null){ const m=MIXES[P.mix]; const Rmin=(1/(m.alpha-1))*((P.xD/P.xF)-m.alpha*((1-P.xD)/(1-P.xF))); set.R=+(Math.max(Rmin,0)*1.2+0.05).toFixed(1); } Object.assign(P,set); }
+  if (s.focus==='column' && !CUT){ CUT=true; $('cut').classList.add('on'); }
+  update(); fly(s.focus);
+  $('caption').innerHTML = `<b>Step ${step+1} of ${STEPS.length} · ${s.t}</b>${s.c(res)}`;
+  $('dots').innerHTML = STEPS.map((_,k)=>`<span class="${k<=step?'on':''}"></span>`).join('');
+}
+$('next').onclick = () => showStep(step+1);
+$('prev').onclick = () => showStep(step-1);
+addEventListener('keydown', e => {
+  if (!document.body.classList.contains('lecture')) return;
+  if (['ArrowRight','PageDown',' '].includes(e.key)) { e.preventDefault(); showStep(step+1); }
+  if (['ArrowLeft','PageUp'].includes(e.key)) { e.preventDefault(); showStep(step-1); }
+});
+function setMode(m){
+  document.body.className = m; $('mLect').classList.toggle('on', m==='lecture'); $('mExp').classList.toggle('on', m==='explore');
+  if (m==='lecture') showStep(step);
+}
+$('mLect').onclick = () => setMode('lecture');
+$('mExp').onclick = () => setMode('explore');
+
+// ── LOOP ───────────────────────────────────────────────────────────────────
+const clock = new THREE.Clock(), tmp = V(0,0,0);
+function animate(){
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), .05);
+  if (tween){ camera.position.lerp(tween.pos,.05); controls.target.lerp(tween.look,.05); if (camera.position.distanceTo(tween.pos)<.02) tween=null; }
+  if (flow){
+    const lp=flow.liq.geometry.attributes.position, vp=flow.vap.geometry.attributes.position;
+    for (let i=0;i<lp.count;i++){
+      flow.s[i] = (flow.s[i] + flow.ls*dt*(0.8+0.4*((i*37)%10)/10)) % flow.total;
+      samplePath(flow, flow.s[i], tmp); lp.setXYZ(i, tmp.x+((i*13)%7-3)*.012, tmp.y, flow.zL[i]);
+    }
+    const span = flow.yTop-flow.y0;
+    for (let i=0;i<vp.count;i++){ let y=vp.getY(i)+flow.vs*dt*(0.7+0.6*((i*53)%10)/10); if (y>flow.yTop) y-=span; vp.setY(i,y); }
+    lp.needsUpdate = vp.needsUpdate = true;
+  }
+  controls.update();
+  renderer.render(scene, camera); labelR.render(scene, camera);
+}
+showStep(0); animate();
+</script>
+</body>
+</html>

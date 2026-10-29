@@ -1,0 +1,31 @@
+/* Design tokens: warm "lab paper" look. System font stack only (no web-font downloads). */
+:root {
+  --paper: #f4ecdc;
+  --grid: #e5dccb;
+  --ink: #1f2a36;
+  /* Teal for fills, borders and markers only: 3.05:1 on --card, 2.64:1 on --paper, too light for text. */
+  --teal: #14a3a0;
+  /* Teal TEXT (and the white-on-teal Next button): 4.70:1 on --paper, 5.43:1 on --card, 5.52:1 on
+     white and with white text (WCAG AA 4.5:1). #0d7c79 was the first proposal: 4.95:1 on --card
+     but only 4.28:1 on --paper. */
+  --teal-text: #0c7572;
+  /* Hover fill of the Next button: 6.87:1 with white text. */
+  --teal-deep: #0a6563;
+  --card: #fffdf8;
+  --line: #d8ccb4;
+  /* Secondary text: 5.5:1 on --paper, 6.3:1 on --card (WCAG AA 4.5:1). Was #6b7580 (4.0:1 on paper). */
+  --muted: #55606b;
+  --warn-bg: #fff1d6;
+  --warn-line: #e0a43a;
+  --warn-ink: #7a4b00;
+  --err-bg: #fde3e1;
+  --err-line: #d9534f;
+  --err-ink: #8a1f1a;
+  --control-line: #c9bda6;
+
+  --font: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --radius: 10px;
+  /* 360 px minimum keeps chart text >= 12 px (charts/svg.ts FONT_SIZE). */
+  --panel-w: clamp(360px, 24vw, 460px);
+  --topbar-h: 60px;
+}

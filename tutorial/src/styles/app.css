@@ -1,0 +1,1052 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  color: var(--ink);
+  font-family: var(--font);
+  background-color: var(--paper);
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+#app {
+  position: fixed;
+  inset: 0;
+}
+
+/* Full-viewport stage for the 3D scene, behind the top bar (z 10) and panel (z 5).
+   The scene creates its own CSS2D label overlay inside it. */
+#stage {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+}
+
+/* ---- 3D labels (CSS2DRenderer) ------------------------------------------ */
+.pin {
+  font: 700 11px/1 var(--font);
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  padding: 4px 7px;
+  background: #fff;
+  border: 1px solid var(--control-line);
+  border-radius: 5px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  pointer-events: none;
+}
+.pin.clickable {
+  pointer-events: auto;
+  cursor: pointer;
+}
+.pin.clickable::before {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 5px;
+  vertical-align: middle;
+  border-radius: 50%;
+  background: var(--teal);
+}
+body.view-explore .pin {
+  font-size: 11px;
+}
+body.view-lecture .pin {
+  font-size: 14px;
+}
+
+/* ---- top bar ---------------------------------------------------------- */
+/* The bar grows (wraps) at narrow widths; topbar.ts writes its measured height into
+   --topbar-h so the panel, dock and card overlay always start below it. */
+.topbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  min-height: 60px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 16px;
+  pointer-events: none;
+}
+.topbar > * {
+  pointer-events: auto;
+}
+.brand h1 {
+  margin: 0;
+  font-size: 20px;
+  letter-spacing: 0.08em;
+}
+.brand small {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  color: var(--muted);
+}
+.topbar-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.seg {
+  display: flex;
+  border: 1px solid var(--control-line);
+  border-radius: 18px;
+  overflow: hidden;
+  background: #fff;
+}
+.seg button {
+  border: 0;
+  background: none;
+  padding: 9px 16px;
+  font: 700 13px/1 var(--font);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink);
+  cursor: pointer;
+}
+.seg button[aria-pressed='true'] {
+  background: var(--ink);
+  color: #fff;
+}
+.seg button:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+.seg button:focus-visible,
+.toplink:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: -2px;
+}
+.toplink {
+  font: 700 13px/1 var(--font);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink);
+  text-decoration: none;
+  padding: 9px 14px;
+  border: 1px solid var(--control-line);
+  border-radius: 18px;
+  background: #fff;
+}
+.toplink:hover {
+  border-color: var(--teal);
+  color: var(--teal-text);
+}
+
+/* ---- explore panel ----------------------------------------------------- */
+.panel {
+  position: fixed;
+  right: 14px;
+  top: var(--topbar-h);
+  bottom: 14px;
+  width: var(--panel-w);
+  z-index: 5;
+  overflow-y: auto;
+  padding: 16px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font-size: 15px;
+  line-height: 1.35;
+}
+body[data-view='lecture'] .panel {
+  display: none;
+}
+.sec {
+  margin-bottom: 14px;
+}
+.sec h3,
+.assumptions h3,
+.assumptions summary {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+}
+select,
+input[type='number'] {
+  width: 100%;
+  padding: 7px 8px;
+  font: inherit;
+  color: var(--ink);
+  border: 1px solid var(--control-line);
+  border-radius: 6px;
+  background: #fff;
+}
+select:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 1px;
+}
+.sl {
+  margin: 10px 0;
+}
+.sl label {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-weight: 600;
+}
+.sl output {
+  font-variant-numeric: tabular-nums;
+  color: var(--teal-text);
+  white-space: nowrap;
+}
+.sl input[type='range'] {
+  width: 100%;
+  accent-color: var(--teal);
+}
+/* Slider ticks at their true fractions: --f (0..1) set per tick in panel.ts. The range
+   thumb's centre travels from half a thumb in from each edge (Chromium/Firefox thumbs are
+   ~16 px). Alternate ticks drop a row so neighbouring words never collide; the end ticks
+   align to the edges instead of centring. */
+.sl-ticks {
+  --thumb: 16px;
+  position: relative;
+  height: 4.1em;
+  margin-top: 0;
+  font-size: 12px;
+  line-height: 1.2;
+  color: var(--muted);
+}
+.sl-tick {
+  position: absolute;
+  top: 0;
+  left: calc(var(--thumb) / 2 + var(--f) * (100% - var(--thumb)));
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  white-space: nowrap;
+}
+.sl-tick::before {
+  content: '';
+  width: 1px;
+  height: 5px;
+  background: var(--muted);
+}
+.sl-tick.low::before {
+  height: 1.3em;
+}
+.sl-tick:first-child {
+  left: 0;
+  transform: none;
+  align-items: flex-start;
+}
+.sl-tick:last-child {
+  left: auto;
+  right: 0;
+  transform: none;
+  align-items: flex-end;
+}
+.sl-tick:first-child::before {
+  margin-left: calc(var(--thumb) / 2);
+}
+.sl-tick:last-child::before {
+  margin-right: calc(var(--thumb) / 2);
+}
+.sl-tick b {
+  font-weight: 600;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.field {
+  display: block;
+  margin: 8px 0;
+}
+.field span,
+.pair span {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 3px;
+}
+.pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 8px;
+  margin: 8px 0;
+}
+.pair span {
+  grid-column: 1 / -1;
+}
+.util-status {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.util-status p {
+  margin: 4px 0;
+}
+.util-status b {
+  color: var(--ink);
+}
+
+/* ---- results ------------------------------------------------------------ */
+.kpi {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  transition: opacity 0.15s;
+}
+.kpi.stale {
+  opacity: 0.5;
+}
+.kpi .cell {
+  background: var(--paper);
+  border-radius: 6px;
+  padding: 7px 9px;
+}
+.kpi small {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+}
+.kpi b {
+  display: block;
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+.kpi em {
+  display: block;
+  font-style: normal;
+  font-size: 12px;
+  color: var(--muted);
+}
+.kpi .empty {
+  grid-column: 1 / -1;
+  color: var(--muted);
+}
+.compare {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+}
+.compare small {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+}
+.banner {
+  margin-bottom: 8px;
+  padding: 9px 11px;
+  border-radius: 6px;
+  line-height: 1.35;
+}
+.banner.err {
+  background: var(--err-bg);
+  border: 1px solid var(--err-line);
+  color: var(--err-ink);
+  font-weight: 600;
+}
+.warnings:empty,
+.compare-slot:empty,
+.banner-slot:empty,
+[data-slot]:empty {
+  display: none;
+}
+.warnings ul,
+.assumptions ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.warnings .warn {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-line);
+  color: var(--warn-ink);
+  font-weight: 600;
+}
+.assumptions {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--paper);
+  font-size: 13px;
+}
+.assumptions summary {
+  cursor: pointer;
+  margin: 0;
+}
+.assumptions li {
+  margin-top: 4px;
+}
+
+/* ---- toast -------------------------------------------------------------- */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 20;
+  max-width: min(640px, 90vw);
+  padding: 12px 18px;
+  border-radius: 10px;
+  background: var(--ink);
+  color: #fff;
+  font-weight: 600;
+  box-shadow: 0 6px 20px #0003;
+}
+.toast[hidden] {
+  display: none;
+}
+
+/* ---- pipe colour legend (bottom-left of the stage) -------------------- */
+.pipe-legend {
+  position: fixed;
+  left: 14px;
+  bottom: 14px;
+  z-index: 4;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  max-width: 520px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--ink);
+  background: rgba(255, 253, 248, 0.85);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  pointer-events: none;
+}
+.pipe-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+.pipe-legend i {
+  display: inline-block;
+  width: 16px;
+  height: 5px;
+  border-radius: 2px;
+}
+.pipe-legend i.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+.pipe-legend .legend-note {
+  flex-basis: 100%;
+  color: var(--muted, var(--ink));
+  font-size: 11px;
+}
+
+/* ---- component cards (spec §6) ---------------------------------------- */
+.card {
+  position: relative;
+  color: var(--ink);
+  line-height: 1.4;
+}
+.card header {
+  margin-bottom: 6px;
+  padding-right: 34px;
+}
+.card-tag {
+  display: block;
+  font-size: 0.75em;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--teal-text);
+}
+.card h3 {
+  margin: 2px 0 0;
+  font-size: 1.25em;
+}
+.card h4 {
+  margin: 12px 0 4px;
+  font-size: 0.75em;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.card p {
+  margin: 0;
+}
+.card dl {
+  display: grid;
+  grid-template-columns: minmax(8em, 40%) 1fr;
+  gap: 3px 10px;
+  margin: 0;
+}
+.card dt {
+  color: var(--muted);
+}
+.card dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+.card ul {
+  margin: 0;
+  padding-left: 1.1em;
+}
+.card li + li {
+  margin-top: 3px;
+}
+.card .eq {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0 2px;
+}
+.card .eq .katex-display {
+  margin: 0.35em 0;
+}
+.card-close {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--control-line);
+  border-radius: 50%;
+  background: #fff;
+  font: 700 18px/1 var(--font);
+  color: var(--ink);
+  cursor: pointer;
+}
+.card-close:hover,
+.card-close:focus-visible {
+  border-color: var(--teal);
+  color: var(--teal-text);
+  outline: none;
+}
+.sub-word {
+  color: var(--teal-text);
+  font-weight: 700;
+  border-bottom: 2px dotted var(--teal);
+  cursor: help;
+}
+.sub-word:hover,
+.sub-word:focus-visible {
+  background: #14a3a022;
+  outline: none;
+}
+[data-slot='selected-part'] {
+  margin-top: 14px;
+  padding: 14px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+/* Lecture view: the card as a projector-sized overlay (body text >= 22 px at 1080p). */
+.card-overlay {
+  position: fixed;
+  inset: var(--topbar-h) 0 0 0;
+  z-index: 15;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: 16px 24px 24px;
+  background: rgba(31, 42, 54, 0.18);
+}
+.card-overlay[hidden] {
+  display: none;
+}
+.card-overlay-body {
+  width: min(1100px, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 26px 30px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 10px 40px #0003;
+}
+.card--overlay {
+  font-size: 22px;
+}
+.card--overlay h4,
+.card--overlay .card-tag {
+  font-size: 0.85em;
+}
+.card--overlay .card-close {
+  width: 44px;
+  height: 44px;
+  font-size: 26px;
+}
+@media (min-width: 1700px) {
+  .card--overlay {
+    font-size: 24px;
+  }
+}
+
+/* ---- Components page (in-app view, #components) ----------------------- */
+.components-page {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  overflow-y: auto;
+  background-color: var(--paper);
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+.components-page[hidden] {
+  display: none;
+}
+.components-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 12px 24px;
+  background: var(--card);
+  border-bottom: 1px solid var(--line);
+}
+.components-head h2 {
+  margin: 0;
+  font-size: 22px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.components-head small {
+  color: var(--muted);
+  font-size: 14px;
+}
+.components-head .toplink {
+  cursor: pointer;
+}
+.components-body {
+  padding: 20px 24px 40px;
+}
+.components-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(560px, 100%), 1fr));
+  gap: 18px;
+  align-items: start;
+}
+.components-cell {
+  padding: 18px 20px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font-size: 17px;
+}
+.components-body .empty {
+  color: var(--muted);
+}
+
+/* ---- charts (McCabe-Thiele, column profile) ----------------------------- */
+[data-slot='chart'] {
+  margin-top: 14px;
+}
+.charts {
+  transition: opacity 0.15s;
+}
+.charts.stale {
+  opacity: 0.5;
+}
+.chart-sec {
+  margin-bottom: 14px;
+}
+.chart-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.chart-note {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: var(--paper);
+  color: var(--muted);
+}
+
+/* ---- Lecture dock: lesson strip, caption card, presenter bar (spec §3.2, §3.4) ----
+   Fixed to the left. In Lecture view it stays inside the left 38 % of the viewport,
+   which caption-safe camera framing keeps clear of the column. */
+.dock {
+  position: fixed;
+  left: 20px;
+  top: calc(var(--topbar-h) + 12px);
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(400px, calc(100vw - 40px));
+  pointer-events: none;
+}
+.dock > * {
+  pointer-events: auto;
+}
+body[data-view='lecture'] .dock {
+  width: min(680px, calc(38vw - 40px));
+}
+.dock .lessons {
+  order: -1;
+}
+
+.lessons {
+  padding: 10px 14px;
+  font-size: 14px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+body[data-view='lecture'] .lessons {
+  font-size: 16px;
+}
+.lessons h2 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+}
+.lessons ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.lessons button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 8px;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 8px;
+}
+.lessons button:hover,
+.lessons button[aria-current] {
+  border-color: var(--teal);
+}
+.lesson-title {
+  flex: 1;
+  font-weight: 600;
+}
+.ticks {
+  display: inline-flex;
+  gap: 3px;
+}
+.tick {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  background: var(--line);
+}
+.tick.done {
+  background: var(--teal);
+}
+.lesson-count {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.lessons-cards {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.8em;
+  color: var(--muted);
+}
+
+/* Caption card: body >= 19 px at 1080p (21 px; 22 px on wide projectors). */
+.caption {
+  padding: 20px 24px 22px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-left: 6px solid var(--teal);
+  border-radius: var(--radius);
+  box-shadow: 0 6px 24px #0002;
+}
+.caption h2 {
+  margin: 0 0 10px;
+  font-size: 19px;
+  line-height: 1.25;
+}
+.caption-body {
+  margin: 0;
+  font-size: 21px;
+  line-height: 1.45;
+}
+@media (min-width: 1700px) {
+  .caption-body {
+    font-size: 22px;
+  }
+}
+
+/* Presenter bar: Prev · step dots · Next (>= 16 px). */
+.presenter {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  font-size: 17px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.caption[hidden],
+.presenter[hidden] {
+  display: none;
+}
+.pres-btn {
+  flex: none;
+  white-space: nowrap;
+  min-height: 44px;
+  padding: 8px 18px;
+  font: 600 17px/1 var(--font);
+  color: var(--ink);
+  cursor: pointer;
+  background: #fff;
+  border: 1px solid var(--control-line);
+  border-radius: 8px;
+}
+.pres-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.pres-next {
+  color: #fff;
+  background: var(--teal-text);
+  border-color: var(--teal-text);
+}
+.pres-next:hover:not(:disabled) {
+  background: var(--teal-deep);
+  border-color: var(--teal-deep);
+}
+.step-dots {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 10px;
+  min-width: 0;
+}
+.step-dot {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  cursor: pointer;
+  background: #fff;
+  border: 2px solid var(--control-line);
+  border-radius: 50%;
+}
+.step-dot.done {
+  background: #bfe6e4;
+  border-color: var(--teal);
+}
+.step-dot[aria-current] {
+  background: var(--teal);
+  border-color: var(--teal);
+  transform: scale(1.25);
+}
+.pres-btn:focus-visible,
+.step-dot:focus-visible,
+.lessons button:focus-visible {
+  outline: 3px solid var(--teal);
+  outline-offset: 2px;
+}
+
+/* Laptop widths: the dock is 38 vw - 40 px wide; keep Prev, the dots and Next on one row
+   where it fits (the dots wrap to a second row rather than squashing the buttons). */
+@media (max-width: 1500px) {
+  .pres-btn {
+    padding: 8px 12px;
+  }
+  .step-dots {
+    gap: 6px;
+  }
+  .step-dot {
+    width: 16px;
+    height: 16px;
+  }
+}
+
+/* ---- sizing (last in the file, so it overrides the base rules above) ---- */
+/* Projector widths: secondary text (ticks, result labels, utility status, assumptions,
+   chart notes, legends) at >= 14 px. */
+@media (min-width: 1700px) {
+  .panel {
+    font-size: 17px;
+  }
+  .kpi b {
+    font-size: 21px;
+  }
+  .sec h3,
+  .assumptions h3,
+  .assumptions summary,
+  .lessons h2,
+  .lessons-cards {
+    font-size: 14px;
+  }
+  .sl-ticks,
+  .kpi em,
+  .compare small {
+    font-size: 14px;
+  }
+  .kpi small,
+  .util-status,
+  .assumptions {
+    font-size: 15px;
+  }
+  .pipe-legend {
+    font-size: 15px;
+  }
+  .pipe-legend .legend-note {
+    font-size: 14px;
+  }
+  .pipe-legend i {
+    width: 20px;
+    height: 6px;
+  }
+  .pipe-legend i.dot {
+    width: 12px;
+    height: 12px;
+  }
+  body.view-explore .pin {
+    font-size: 13px;
+  }
+}
+@media (max-width: 900px) {
+  .brand small {
+    display: none;
+  }
+  .panel {
+    top: auto;
+    bottom: 0;
+    right: 0;
+    left: 0;
+    width: auto;
+    max-height: 55vh;
+    border-radius: var(--radius) var(--radius) 0 0;
+  }
+  /* A full-width sheet would blow the charts up to the sheet width: cap them. */
+  .chart-svg {
+    max-width: 560px;
+    margin: 0 auto;
+  }
+
+  /* Top bar: brand on its own row, compact controls wrapping below it. */
+  .topbar {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 6px 12px;
+    padding: 8px 12px;
+  }
+  .brand h1 {
+    font-size: 17px;
+  }
+  .topbar-controls {
+    justify-content: flex-start;
+    gap: 6px;
+  }
+  .seg button,
+  .toplink {
+    padding: 8px 11px;
+    font-size: 12px;
+  }
+
+  /* Lecture: the dock becomes a band along the bottom (caption, then the presenter bar);
+     camera framing measures it and keeps the plant above it. The lesson strip is in Explore. */
+  body[data-view='lecture'] .dock {
+    top: auto;
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    width: auto;
+    gap: 8px;
+  }
+  body[data-view='lecture'] .dock .lessons {
+    display: none;
+  }
+  .caption {
+    max-height: 32vh;
+    overflow-y: auto;
+    padding: 12px 16px 14px;
+    border-left-width: 5px;
+  }
+  .caption h2 {
+    margin-bottom: 6px;
+    font-size: 16px;
+  }
+  .caption-body {
+    font-size: 17px;
+    line-height: 1.4;
+  }
+  .presenter {
+    gap: 8px;
+    padding: 6px 8px;
+  }
+  .pres-btn {
+    min-height: 40px;
+    padding: 6px 12px;
+    font-size: 15px;
+  }
+  .step-dots {
+    gap: 6px;
+  }
+  .step-dot {
+    width: 16px;
+    height: 16px;
+  }
+  .lessons {
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+  .card-overlay {
+    padding: 8px;
+  }
+  .card-overlay-body {
+    padding: 16px 18px;
+  }
+  .card--overlay {
+    font-size: 17px;
+  }
+  /* The pipe legend moves to the top (the bottom belongs to the caption band); in Explore
+     the bottom sheet and the lesson strip leave no room for it. */
+  .pipe-legend {
+    top: calc(var(--topbar-h) + 6px);
+    bottom: auto;
+    left: 8px;
+    max-width: calc(100vw - 16px);
+    font-size: 12px;
+  }
+  body[data-view='explore'] .pipe-legend {
+    display: none;
+  }
+}
+
+/* Phones: no room for the lesson strip above the bottom sheet (Lecture is one tap away). */
+@media (max-width: 560px) {
+  body[data-view='explore'] .dock .lessons,
+  .pipe-legend {
+    display: none;
+  }
+  .step-dots {
+    gap: 4px;
+  }
+  .step-dot {
+    width: 14px;
+    height: 14px;
+  }
+}
